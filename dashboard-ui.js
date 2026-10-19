@@ -42,7 +42,7 @@ $('uxCSV').onclick=exportCSV;$('uxPrint').onclick=()=>window.print();$('uxCompar
 }
 function progress(count){const pct=target?count/target*100:0;$('uxProgress').innerHTML=target?'<div class="ux-track" role="progressbar" aria-label="Submission target" aria-valuenow="'+Math.min(100,Math.round(pct))+'" aria-valuemin="0" aria-valuemax="100"><div class="ux-fill" style="width:'+Math.min(100,pct)+'%"></div></div><b>'+Math.round(pct)+'%</b><p>'+count.toLocaleString()+' of '+target.toLocaleString()+' submissions</p>':'<p style="margin-top:18px">Set a target to see your progress.</p>';}
 function exportCSV(){const rows=rowsInView();if(!rows.length){showToast('No matching rows to export.');return;}const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replace(/"/g,'""')+'"';const csv=[hdrs,...rows].map(r=>r.map(cell).join(',')).join('\r\n');downloadBlob(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),'MEEG_filtered_'+cairoToday()+'.csv');}
-const analysisFilters={from:'',to:'',modality:'all',shift:''};
+const analysisFilters={from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''};
 function labelerSubmissionMetrics(rows){
  const idx=name=>hdrs.findIndex(h=>String(h).trim().toLowerCase()===name);
  const ni=idx('national id'),mi=idx('modality'),pi=idx('pass');
@@ -60,10 +60,43 @@ function labelerSubmissionMetrics(rows){
  return {unique:ni<0?null:names.size,missingNames,totals,categoryUnique:Object.fromEntries(Object.entries(categoryIds).map(([k,ids])=>[k,ni<0?null:ids.size])),categoryColumns:mi>=0&&pi>=0};
 }
 
+function categoryGroups(rows,field){
+ const idx=hdrs.findIndex(h=>String(h).trim().toLowerCase()===field.toLowerCase());if(idx<0)return null;
+ const map=new Map();rows.forEach(r=>{const name=String(r[idx]||'').trim()||'Unknown';if(!map.has(name))map.set(name,[]);map.get(name).push(r);});
+ return [...map].map(([name,group])=>({name,totals:labelerSubmissionMetrics(group).totals})).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+}
+function addAnalysisCharts(a){
+ const defs=[['Lidar FP','lidarFP','#7258f5'],['Lidar QA','lidarQA','#15b8a6'],['Lane Line FP','laneFP','#ed9a35'],['Lane Line QA','laneQA','#e9689e']];
+ const container=document.createElement('div');container.className='an-extra-charts';
+ const floorField=hdrs.some(h=>h.trim().toLowerCase()==='floor')?'Floor':'Unit';
+ [[floorField,'Floor / Unit','horizontal','unit'],['Qtc Name','QC','vertical','qtc']].forEach(([field,label,layout,key])=>{
+ const groups=categoryGroups(a.selected,field),panel=document.createElement('section');panel.className='ux-panel';
+ panel.innerHTML='<h3>Total Submit by '+label+'</h3><p>Four submission categories · select a bar to filter '+label+' and category.</p><div class="an-chart-key">'+defs.map(([name,,color])=>'<span><i style="background:'+color+'"></i>'+name+'</span>').join('')+'</div>';
+ if(groups===null){panel.insertAdjacentHTML('beforeend','<div class="ux-empty">Required column unavailable: '+esc(field)+'</div>');container.appendChild(panel);return;}
+ const max=Math.max(1,...groups.flatMap(g=>Object.values(g.totals)));
+ const chart=document.createElement('div');chart.className='an-group-chart '+layout;chart.setAttribute('aria-label','Total Submit by '+label);
+ groups.forEach(g=>{const group=document.createElement('div');group.className='an-bar-group';const title=document.createElement('strong');title.textContent=g.name;title.className='an-group-name';group.appendChild(title);const bars=document.createElement('div');bars.className='an-category-bars';defs.forEach(([name,cat,color])=>{const bar=document.createElement('button');bar.className='an-category-bar';const value=g.totals[cat];bar.style.setProperty('--bar-color',color);bar.style.setProperty('--bar-size',Math.max(value?2:0,value/max*100)+'%');bar.setAttribute('aria-label',g.name+' · '+name+': '+value+' submissions. Select to filter.');bar.title=g.name+' · '+name+': '+value.toLocaleString();bar.innerHTML='<span>'+value.toLocaleString()+'</span>';bar.onclick=()=>{analysisFilters[key]=g.name;analysisFilters.category=cat;renderAnalysis();};bars.appendChild(bar);});group.appendChild(bars);chart.appendChild(group);});
+ panel.appendChild(chart);if(!groups.length)chart.innerHTML='<div class="ux-empty">No matching submissions.</div>';container.appendChild(panel);
+ });analysis.querySelector('.ux-overview').appendChild(container);
+ const hint=document.createElement('p');hint.className='an-context';hint.textContent='Chart filters: '+[analysisFilters.unit,analysisFilters.qtc,defs.find(d=>d[1]===analysisFilters.category)?.[0]].filter(Boolean).join(' · ');const clear=document.createElement('button');clear.className='btn';clear.textContent='Clear chart filters';clear.onclick=()=>{Object.assign(analysisFilters,{unit:'',qtc:'',category:''});renderAnalysis();};hint.append(' ',clear);container.prepend(hint);
+ const tooltip=document.createElement('div');tooltip.className='an-chart-tooltip';tooltip.role='tooltip';tooltip.hidden=true;document.body.querySelectorAll('.an-chart-tooltip').forEach(n=>n.remove());document.body.appendChild(tooltip);
+ function show(rows,title,event){const totals=labelerSubmissionMetrics(rows).totals;tooltip.replaceChildren();const heading=document.createElement('b');heading.textContent=title;tooltip.appendChild(heading);defs.forEach(([name,key])=>{const p=document.createElement('div');p.textContent=name+': '+totals[key].toLocaleString();tooltip.appendChild(p);});tooltip.hidden=false;const rect=event.currentTarget.getBoundingClientRect();const x=event.clientX||rect.left,y=event.clientY||rect.top;tooltip.style.left=Math.min(Math.max(8,x+14),innerWidth-245)+'px';tooltip.style.top=Math.max(8,Math.min(y+14,innerHeight-170))+'px';}
+ function bind(el,rows,title,select){el.setAttribute('role','button');const display=e=>show(rows,title,e);el.addEventListener('pointermove',display);el.addEventListener('focus',display);el.addEventListener('pointerleave',()=>tooltip.hidden=true);el.addEventListener('blur',()=>tooltip.hidden=true);el.addEventListener('click',()=>{tooltip.hidden=true;select();});el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}if(e.key==='Escape')tooltip.hidden=true;});}
+ const line=$('anLine').querySelector('svg');
+ if(line){const circles=line.querySelectorAll('circle');circles.forEach((el,i)=>{const date=a.points[i][0];bind(el,a.selected.filter(r=>rDate(r)===date),date,()=>{analysisFilters.from=date;analysisFilters.to=date;renderAnalysis();});});
+ line.addEventListener('click',e=>{if(e.target.closest('circle'))return;const rect=line.getBoundingClientRect(),x=(e.clientX-rect.left)/rect.width*760;const index=Math.min(a.points.length-1,Math.max(0,Math.round((x-55)/(760-55-20)*Math.max(0,a.points.length-1))));const d=a.points[index]?.[0];if(d){analysisFilters.from=d;analysisFilters.to=d;tooltip.hidden=true;renderAnalysis();}});
+ line.addEventListener('pointermove',e=>{if(e.target.closest('circle'))return;const rect=line.getBoundingClientRect(),x=(e.clientX-rect.left)/rect.width*760;const i=Math.min(a.points.length-1,Math.max(0,Math.round((x-55)/685*Math.max(0,a.points.length-1))));const date=a.points[i]?.[0];if(date)show(a.selected.filter(r=>rDate(r)===date),date,e);});line.addEventListener('pointerleave',()=>tooltip.hidden=true);
+ }
+ const si=hdrs.findIndex(h=>h.trim().toLowerCase()==='shift');const shiftName=r=>si>=0?String(r[si]||'').trim()||'Unknown':'Unknown';
+ $('anDonut').querySelectorAll('circle[tabindex]').forEach((el,i)=>{const shift=a.shifts[i][0];el.style.pointerEvents='stroke';bind(el,a.selected.filter(r=>shiftName(r)===shift),shift,()=>{analysisFilters.shift=shift;renderAnalysis();});});
+ $('anLegend').querySelectorAll(':scope > div').forEach((el,i)=>{el.tabIndex=0;const shift=a.shifts[i][0];bind(el,a.selected.filter(r=>shiftName(r)===shift),shift,()=>{analysisFilters.shift=shift;renderAnalysis();});});
+}
+
 function analysisAggregate(rows,filters){
  const idx=name=>hdrs.findIndex(h=>h.toLowerCase()===name.toLowerCase());const mi=idx('Modality'),si=idx('Shift');
  const lane=r=>mi>=0&&String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'')==='laneline';
- const selected=rows.filter(r=>{const date=rDate(r);return (!filters.from||date>=filters.from)&&(!filters.to||date&&date<=filters.to)&&(filters.modality!=='lane'||lane(r))&&(!filters.shift||String(r[si]||'').trim()===filters.shift);});
+ const fi=idx(hdrs.some(h=>h.trim().toLowerCase()==='floor')?'Floor':'Unit'),qi=idx('Qtc Name'),passIdx=idx('Pass');
+ const selected=rows.filter(r=>{const date=rDate(r);const mod=mi<0?'':String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'');const pass=passIdx<0?'':String(r[passIdx]||'').trim().toUpperCase();const category=(mod==='lidar'?'lidar':mod==='laneline'?'lane':'')+pass;return (!filters.unit||(fi>=0&&(String(r[fi]||'').trim()||'Unknown')===filters.unit))&&(!filters.qtc||(qi>=0&&(String(r[qi]||'').trim()||'Unknown')===filters.qtc))&&(!filters.category||category===filters.category)&& (!filters.from||date>=filters.from)&&(!filters.to||date&&date<=filters.to)&&(filters.modality!=='lane'||lane(r))&&(!filters.shift||(si>=0?String(r[si]||'').trim()||'Unknown':'Unknown')===filters.shift);});
  const dates=new Map(),shifts=new Map();selected.forEach(r=>{const d=rDate(r);if(d)dates.set(d,(dates.get(d)||0)+1);const shift=si<0?'Unknown':String(r[si]||'').trim()||'Unknown';shifts.set(shift,(shifts.get(shift)||0)+1);});
  const dated=[...dates.keys()].sort();const points=[];
  if(dated.length){const from=filters.from||dated[0],to=filters.to||dated[dated.length-1];let d=new Date(from+'T00:00:00Z');const end=new Date(to+'T00:00:00Z');while(d<=end){const key=d.toISOString().slice(0,10);points.push([key,dates.get(key)||0]);d.setUTCDate(d.getUTCDate()+1);}}
@@ -78,11 +111,11 @@ function renderAnalysis(){
  const tip=category&&labelerMetrics.categoryColumns?'Total Submit · '+category[0]+': '+labelerMetrics.totals[category[1]].toLocaleString():'';
  const tipId=category?'an-tip-'+category[1]+(label.startsWith('Unique')?'-unique':'-submit'):'';
  return '<article class="ux-panel'+(tip?' an-tip-card':'')+'"'+(tip?' tabindex="0" aria-describedby="'+tipId+'"':'')+'><span class="ux-label">'+label+'</span><strong class="an-value">'+esc(typeof val==='number'?val.toLocaleString():val)+'</strong><p>'+esc(note)+'</p>'+(tip?'<span class="an-tooltip" role="tooltip" id="'+tipId+'">'+esc(tip)+'</span>':'')+'</article>';
- }).join('')+'</div><div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><p>Daily counts, including zero-activity days. Hover or focus a point for details.</p><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
+ }).join('')+'</div><div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><p>Click a date to filter. Hover or focus for the four category totals.</p><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
  $('anMod').value=analysisFilters.modality;$('anShift').value=analysisFilters.shift;
  $('anApply').onclick=()=>{const from=$('anFrom').value,to=$('anTo').value;if(from&&to&&(from>to||(Date.parse(to)-Date.parse(from))/86400000>36525)){showToast('Choose a valid date range (up to 100 years).');return;}Object.assign(analysisFilters,{from,to,modality:$('anMod').value,shift:$('anShift').value});renderAnalysis();};
- $('anReset').onclick=()=>{Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:''});renderAnalysis();};$('anDashboard').onclick=()=>filterButton.click();$('anRefresh').onclick=()=>loadData();
- if(!a.selected.length){$('anLine').innerHTML='<div class="ux-empty">'+(window._firstDataReady?'No submissions match these filters.':'Waiting for dashboard data…')+'</div>';$('anDonut').innerHTML='<div class="ux-empty">No shift distribution available.</div>';return;}
+ $('anReset').onclick=()=>{Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''});renderAnalysis();};$('anDashboard').onclick=()=>filterButton.click();$('anRefresh').onclick=()=>loadData();
+ if(!a.selected.length){$('anLine').innerHTML='<div class="ux-empty">'+(window._firstDataReady?'No submissions match these filters.':'Waiting for dashboard data…')+'</div>';$('anDonut').innerHTML='<div class="ux-empty">No shift distribution available.</div>';addAnalysisCharts(a);return;}
  if(!a.points.length)$('anLine').innerHTML='<div class="ux-empty">No valid dates available.</div>';
  else{
  const W=760,H=280,L=55,R=20,T=20,B=45,max=Math.max(1,...a.points.map(p=>p[1]));const x=i=>L+(a.points.length===1?(W-L-R)/2:i/(a.points.length-1)*(W-L-R)),y=v=>H-B-v/max*(H-T-B);
@@ -95,6 +128,7 @@ function renderAnalysis(){
  a.shifts.forEach(([s,c],i)=>{const length=c/a.selected.length*circumference;ring+='<circle tabindex="0" role="img" aria-label="'+esc(s)+': '+c+' submissions, '+(c/a.selected.length*100).toFixed(1)+' percent" cx="100" cy="100" r="70" fill="none" stroke="'+palette[i%palette.length]+'" stroke-width="26" stroke-dasharray="'+length+' '+(circumference-length)+'" stroke-dashoffset="'+(-offset)+'" transform="rotate(-90 100 100)"><title>'+esc(s)+' · '+c.toLocaleString()+' · '+(c/a.selected.length*100).toFixed(1)+'%</title></circle>';offset+=length;});
  $('anDonut').innerHTML=ring+'<text x="100" y="99" text-anchor="middle" class="an-total">'+a.selected.length.toLocaleString()+'</text><text x="100" y="120" text-anchor="middle">Submissions</text></svg>';
  $('anLegend').innerHTML=a.shifts.map(([s,c],i)=>'<div><span style="background:'+palette[i%palette.length]+'" class="an-dot"></span><span>'+esc(s)+'</span><b>'+c.toLocaleString()+'</b><span>'+(c/a.selected.length*100).toFixed(1)+'%</span></div>').join('');
+ addAnalysisCharts(a);
 }
 
 /* Named local filter bookmarks, isolated by signed-in account. */
@@ -107,7 +141,7 @@ function applyBookmark(state){
  Object.keys(sel).forEach(k=>sel[k].clear());Object.entries(state.sel||{}).forEach(([k,values])=>{if(Array.isArray(values))sel[k]=new Set(values);});
  selD=new Set(state.selD||[]);selWeeks=new Set(state.selWeeks||[]);idFilter=state.idFilter||'';timeFrom=state.timeFrom||'';timeTo=state.timeTo||'';timePreset=TIME_SHIFTS[state.timePreset]?state.timePreset:'';
  setShiftsUI(state.shifts||{});activeLoc=['__all__','__totalsubmit__','__topperf__','__quality__',...locations].includes(state.activeLoc)?state.activeLoc:'__all__';
- Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:''},state.analysis||{});view=['summary','details','both'].includes(state.view)?state.view:'both';
+ Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''},state.analysis||{});view=['summary','details','both'].includes(state.view)?state.view:'both';
  closeAll();buildStrip();applyAll();location.hash=state.page==='analysis-overview'?'analysis-overview':'dashboard';route();
 }
 const bookmarks=document.createElement('section');bookmarks.className='ux-bookmarks';bookmarks.setAttribute('aria-label','Saved filter bookmarks');bookmarks.innerHTML='<span class="ux-bookmark-icon" aria-hidden="true">☆</span><label for="uxBookmarkList">Filter bookmarks</label><select id="uxBookmarkList" aria-label="Saved filter bookmark"><option value="">Choose a bookmark…</option></select><button class="btn" id="uxBookmarkApply">Apply</button><button class="btn" id="uxBookmarkDelete">Delete</button><form id="uxBookmarkForm"><input id="uxBookmarkName" aria-label="New bookmark name" placeholder="Name this filter selection…" maxlength="60" required><button class="btn btn-c" type="submit">☆ Save bookmark</button></form><span class="ux-note">Saved on this browser</span>';
