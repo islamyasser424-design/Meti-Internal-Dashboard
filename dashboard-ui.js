@@ -75,6 +75,28 @@ function renderAnalysis(){
  $('anLegend').innerHTML=a.shifts.map(([s,c],i)=>'<div><span style="background:'+palette[i%palette.length]+'" class="an-dot"></span><span>'+esc(s)+'</span><b>'+c.toLocaleString()+'</b><span>'+(c/a.selected.length*100).toFixed(1)+'%</span></div>').join('');
 }
 
+/* Named local filter bookmarks, isolated by signed-in account. */
+function bookmarkKey(){return 'meeg_filter_bookmarks_v1:'+String(getLoggedInEmail()||'guest').toLowerCase();}
+function readBookmarks(){try{const data=JSON.parse(localStorage.getItem(bookmarkKey())||'[]');return Array.isArray(data)?data.filter(b=>b&&typeof b.id==='string'&&typeof b.name==='string'&&b.state):[];}catch(e){return [];}}
+function writeBookmarks(items){try{localStorage.setItem(bookmarkKey(),JSON.stringify(items));return true;}catch(e){showToast('Bookmarks could not be saved. Check browser storage.');return false;}}
+function captureBookmark(){const input=$('idFilterInput');return {sel:Object.fromEntries(Object.entries(sel).map(([k,v])=>[k,[...v]])),selD:[...selD],selWeeks:[...selWeeks],idFilter:input?input.value.trim():idFilter,timeFrom,timeTo,timePreset,shifts:Object.fromEntries(Object.entries(shiftState).map(([k,v])=>[k,!!v.on])),activeLoc,analysis:{...analysisFilters},view,page:location.hash==='#analysis-overview'?'analysis-overview':'dashboard'};}
+function applyBookmark(state){
+ clearTimeout(_idFilterDebounce);
+ Object.keys(sel).forEach(k=>sel[k].clear());Object.entries(state.sel||{}).forEach(([k,values])=>{if(Array.isArray(values))sel[k]=new Set(values);});
+ selD=new Set(state.selD||[]);selWeeks=new Set(state.selWeeks||[]);idFilter=state.idFilter||'';timeFrom=state.timeFrom||'';timeTo=state.timeTo||'';timePreset=TIME_SHIFTS[state.timePreset]?state.timePreset:'';
+ setShiftsUI(state.shifts||{});activeLoc=['__all__','__totalsubmit__','__topperf__','__quality__',...locations].includes(state.activeLoc)?state.activeLoc:'__all__';
+ Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:''},state.analysis||{});view=['summary','details','both'].includes(state.view)?state.view:'both';
+ closeAll();buildStrip();applyAll();location.hash=state.page==='analysis-overview'?'analysis-overview':'dashboard';route();
+}
+const bookmarks=document.createElement('section');bookmarks.className='ux-bookmarks';bookmarks.setAttribute('aria-label','Saved filter bookmarks');bookmarks.innerHTML='<span class="ux-bookmark-icon" aria-hidden="true">☆</span><label for="uxBookmarkList">Filter bookmarks</label><select id="uxBookmarkList" aria-label="Saved filter bookmark"><option value="">Choose a bookmark…</option></select><button class="btn" id="uxBookmarkApply">Apply</button><button class="btn" id="uxBookmarkDelete">Delete</button><form id="uxBookmarkForm"><input id="uxBookmarkName" aria-label="New bookmark name" placeholder="Name this filter selection…" maxlength="60" required><button class="btn btn-c" type="submit">☆ Save bookmark</button></form><span class="ux-note">Saved on this browser</span>';
+document.body.insertBefore(bookmarks,root);
+function renderBookmarkList(selected){const list=$('uxBookmarkList'),items=readBookmarks();list.replaceChildren(new Option(items.length?'Choose a bookmark…':'No saved bookmarks yet',''));items.forEach(b=>list.add(new Option(b.name,b.id)));if(selected&&items.some(b=>b.id===selected))list.value=selected;const disabled=!list.value;$('uxBookmarkApply').disabled=disabled;$('uxBookmarkDelete').disabled=disabled;}
+$('uxBookmarkList').onchange=()=>{const disabled=!$('uxBookmarkList').value;$('uxBookmarkApply').disabled=disabled;$('uxBookmarkDelete').disabled=disabled;};
+$('uxBookmarkForm').onsubmit=e=>{e.preventDefault();const name=$('uxBookmarkName').value.trim();if(!name){$('uxBookmarkName').focus();return;}const items=readBookmarks();if(items.some(b=>b.name.toLowerCase()===name.toLowerCase())){showToast('This name already exists. Choose another bookmark name.');return;}const id=typeof crypto.randomUUID==='function'?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);items.push({id,name,state:captureBookmark(),createdAt:new Date().toISOString()});if(writeBookmarks(items)){renderBookmarkList(id);$('uxBookmarkName').value='';showToast('Filter bookmark saved: '+name);}};
+$('uxBookmarkApply').onclick=()=>{if(!window._firstDataReady){showToast('Wait for dashboard data to load before applying a bookmark.');return;}const item=readBookmarks().find(b=>b.id===$('uxBookmarkList').value);if(!item)return;applyBookmark(item.state);showToast('Bookmark applied: '+item.name);};
+$('uxBookmarkDelete').onclick=()=>{const items=readBookmarks(),id=$('uxBookmarkList').value,item=items.find(b=>b.id===id);if(!item)return;if(writeBookmarks(items.filter(b=>b.id!==id))){renderBookmarkList();showToastUndo('Bookmark deleted: '+item.name,'Undo',()=>{const latest=readBookmarks();if(!latest.some(b=>b.id===item.id)){latest.push(item);if(writeBookmarks(latest))renderBookmarkList(item.id);}});}};
+let bookmarkAccount=bookmarkKey();const bookmarkUserObserver=new MutationObserver(()=>{const key=bookmarkKey();if(key!==bookmarkAccount){bookmarkAccount=key;renderBookmarkList();}});bookmarkUserObserver.observe($('userName'),{childList:true,subtree:true});window.addEventListener('storage',e=>{if(e.key===bookmarkKey())renderBookmarkList();});renderBookmarkList();
+
 const oldRender=renderAllSections;renderAllSections=function(){oldRender.apply(this,arguments);renderOverview();renderAnalysis();};
 renderOverview();
 })();
