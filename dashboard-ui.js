@@ -30,16 +30,126 @@ function daily(rows){const map=new Map();rows.forEach(r=>{const d=rDate(r);if(d)
 function spark(points){if(!points.length)return '';const max=Math.max(1,...points.map(p=>p[1]));return '<svg class="ux-spark" viewBox="0 0 200 32" preserveAspectRatio="none" aria-label="Daily submission trend"><polyline fill="none" stroke="currentColor" stroke-width="2.5" points="'+points.map((p,i)=>(points.length===1?100:i/(points.length-1)*200)+','+(30-p[1]/max*26)).join(' ')+'"/></svg>';}
 function animate(){overview.querySelectorAll('[data-count]').forEach(el=>{const value=Number(el.dataset.count);if(reduced()){el.textContent=value.toLocaleString();return;}const begin=performance.now();function tick(t){const p=Math.min(1,(t-begin)/650);el.textContent=Math.round(value*(1-Math.pow(1-p,3))).toLocaleString();if(p<1&&el.isConnected)requestAnimationFrame(tick);}requestAnimationFrame(tick);});}
 function applyView(){root.classList.toggle('ux-summary-hidden',view==='details');root.classList.toggle('ux-details-hidden',view==='summary');overview.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===view)));}
+function getCategorySummary(rows){
+ const idx=name=>hdrs.findIndex(h=>String(h).trim().toLowerCase()===name);
+ const ni=idx('national id'),mi=idx('modality'),pi=idx('pass'),li=idx('labeler name');
+ const defs=[
+  {key:'lidarFP',label:'Lidar FP',modality:'Lidar',pass:'FP',color:'#7258f5',bg:'rgba(114,88,245,0.12)',icon:'⚡'},
+  {key:'lidarQA',label:'Lidar QA',modality:'Lidar',pass:'QA',color:'#15b8a6',bg:'rgba(21,184,166,0.12)',icon:'✓'},
+  {key:'laneFP',label:'Lane Line FP',modality:'Lane Line',pass:'FP',color:'#ed9a35',bg:'rgba(237,154,53,0.12)',icon:'⚡'},
+  {key:'laneQA',label:'Lane Line QA',modality:'Lane Line',pass:'QA',color:'#e9689e',bg:'rgba(233,104,158,0.12)',icon:'✓'}
+ ];
+ const categories=Object.fromEntries(defs.map(d=>[d.key,{
+  ...d,
+  tasks:0,
+  labelerSet:new Set(),
+  uniqueLabelers:0,
+  avgSubmit:'0'
+ }]));
+ const overallLabelers=new Set();
+ let overallTasks=0;
+ rows.forEach(r=>{
+  let lid='';
+  if(ni>=0){
+   const rawNi=String(r[ni]??'').trim()
+    .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632))
+    .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776))
+    .replace(/\.0+$/,'').replace(/[\s-]/g,'');
+   if(/^\d{14}$/.test(rawNi))lid=rawNi;
+  }
+  if(!lid&&li>=0){
+   const name=String(r[li]??'').trim().toLowerCase();
+   if(name)lid='name:'+name;
+  }
+  if(lid)overallLabelers.add(lid);
+  overallTasks++;
+  const mod=mi<0?'':String(r[mi]??'').trim().toLowerCase().replace(/[\s_-]+/g,'');
+  const pass=pi<0?'':String(r[pi]??'').trim().toUpperCase();
+  const prefix=mod==='lidar'?'lidar':(mod==='laneline'||mod==='lane')?'lane':'';
+  if(prefix&&(pass==='FP'||pass==='QA')){
+   const key=prefix+pass;
+   const cat=categories[key];
+   if(cat){
+    cat.tasks++;
+    if(lid)cat.labelerSet.add(lid);
+   }
+  }
+ });
+ defs.forEach(d=>{
+  const cat=categories[d.key];
+  cat.uniqueLabelers=cat.labelerSet.size;
+  cat.avgSubmit=cat.uniqueLabelers>0?(cat.tasks/cat.uniqueLabelers).toFixed(1):'0';
+ });
+ const overallUnique=overallLabelers.size;
+ const overallAvg=overallUnique>0?(overallTasks/overallUnique).toFixed(1):'0';
+ return {
+  defs,
+  categories,
+  overall:{
+   tasks:overallTasks,
+   uniqueLabelers:overallUnique,
+   avgSubmit:overallAvg
+  }
+ };
+}
+
+function renderCategoryCardsHTML(summary,activeCategory='',scope='overview'){
+ const defs=summary.defs;
+ const isOverview=scope==='overview';
+ return '<section class="an-cat-section" aria-label="Workstream metrics">'
+  +'<div class="an-cat-grid">'
+  +defs.map(d=>{
+   const cat=summary.categories[d.key];
+   const isSel=activeCategory===d.key;
+   const titleAction=isOverview?'Click to view '+d.label+' in Analysis':'Click to filter by '+d.label+(isSel?' (active)':'');
+   return '<article class="an-cat-card '+(isSel?'selected':'')+'" style="--cat-color:'+d.color+';--cat-bg:'+d.bg+'" data-cat="'+d.key+'" role="button" tabindex="0" aria-label="'+d.label+': '+cat.tasks.toLocaleString()+' tasks, '+cat.uniqueLabelers.toLocaleString()+' unique labelers, '+cat.avgSubmit+' avg submit per labeler" title="'+titleAction+'">'
+    +'<div class="an-cat-header">'
+     +'<div class="an-cat-title"><span aria-hidden="true">'+d.icon+'</span> <span>'+d.label+'</span></div>'
+     +'<span class="an-cat-badge">'+d.pass+'</span>'
+    +'</div>'
+    +'<div class="an-cat-stats">'
+     +'<div class="an-cat-stat">'
+      +'<span class="an-cat-stat-lbl">Total Tasks</span>'
+      +'<strong class="an-cat-stat-val highlight">'+cat.tasks.toLocaleString()+'</strong>'
+     +'</div>'
+     +'<div class="an-cat-stat">'
+      +'<span class="an-cat-stat-lbl">Unique Labelers</span>'
+      +'<strong class="an-cat-stat-val">'+cat.uniqueLabelers.toLocaleString()+'</strong>'
+     +'</div>'
+     +'<div class="an-cat-stat">'
+      +'<span class="an-cat-stat-lbl">Avg / Labeler</span>'
+      +'<strong class="an-cat-stat-val highlight">'+cat.avgSubmit+'</strong>'
+     +'</div>'
+    +'</div>'
+   +'</article>';
+  }).join('')
+  +'</div>'
+  +'</section>';
+}
+
 function renderOverview(){
 if(root.hidden)return;
 const rows=rowsInView(),days=daily(rows),last=days.slice(-21),max=Math.max(1,...last.map(p=>p[1]));
-const metrics=[['Submissions',window._firstDataReady||rawRows.length?rows.length:null,'Rows matching your current filters. One row counts as one submission.','#7258f5'],['Active labelers',uniq(rows,'Labeler Name'),'Distinct non-empty labeler names in the current selection.','#0a9d8c'],['Active queues',uniq(rows,'Queue Name'),'Distinct non-empty queues in the current selection.','#df8b24'],['Devices',uniq(rows,'Pc No'),'Distinct non-empty PC numbers in the current selection.','#df5c99']];
-overview.innerHTML='<div class="ux-heading"><div><div class="ux-eyebrow">Performance at a glance</div><h2>Productivity dashboard</h2><p>Explore your team’s output, one insight at a time.</p></div><div class="ux-tools"><label>From<input type="date" id="uxFrom" aria-label="Start date"></label><label>To<input type="date" id="uxTo" aria-label="End date"></label><button class="btn" id="uxRange">Apply range</button><button class="btn" id="uxCSV">↓ CSV</button><button class="btn" id="uxPrint">Print</button></div></div><div class="ux-grid">'+metrics.map(([label,value,note,tone],i)=>'<article class="ux-kpi" style="--tone:'+tone+'"><div class="ux-flipper"><div class="ux-face"><span class="ux-label" title="'+note+'">'+label+'</span><button class="ux-flip" data-flip="'+i+'" aria-label="Show '+label+' details" aria-expanded="false">↗</button><strong '+(value===null?'':'data-count="'+value+'"')+'>'+ (value===null?'—':value.toLocaleString())+'</strong><span class="ux-note">'+(value===null?(window._firstDataReady?'Column unavailable':'Waiting for data'):'Current filtered selection')+'</span>'+(i===0?spark(last):'<span class="ux-note" style="margin-top:auto;color:'+tone+'">'+(rows.length?'Live data · filtered view':'No matching data')+'</span>')+'</div><div class="ux-face ux-back" inert><b>'+label+'</b><p>'+note+'</p><span class="ux-note">'+(value===null?'Required column is missing.':'No previous-period comparison is assumed.')+'</span><button class="btn" data-unflip="'+i+'">Back</button></div></div></article>').join('')+'</div><div class="ux-panels"><section class="ux-panel"><h3>Submission activity</h3><p>Latest 21 dates with activity. Select a bar to drill into that date.</p><div class="ux-bars">'+(last.length?last.map(([d,c])=>'<button class="ux-bar" style="height:'+Math.max(5,c/max*100)+'%" data-date="'+d+'" title="'+d+': '+c+' submissions" aria-label="'+d+', '+c+' submissions. Filter by this date."></button>').join(''):'<div class="ux-empty">No dated submissions match your selection. Adjust or clear the filters.</div>')+'</div><details><summary>View chart values</summary>'+last.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</details></section><section class="ux-panel"><h3>Personal submission target</h3><p>A target for this filtered selection, saved on this browser.</p><label class="ux-note">Target rows<input class="ux-target" id="uxTarget" type="number" min="1" step="1" placeholder="Set your target" value="'+(target||'')+'"></label><div id="uxProgress"></div></section></div><div class="ux-view-tabs" role="tablist" aria-label="Dashboard view"><button class="btn" role="tab" data-view="summary">Summary</button><button class="btn" role="tab" data-view="details">Details & tables</button><button class="btn" role="tab" data-view="both">Expanded view</button><button class="btn" id="uxCompare">Compare periods</button></div>';
+const catSummary=getCategorySummary(rows);
+const metrics=[
+ ['Submissions',window._firstDataReady||rawRows.length?catSummary.overall.tasks:null,'Rows matching your current filters. One row counts as one submission.','#7258f5'],
+ ['Active labelers',window._firstDataReady||rawRows.length?catSummary.overall.uniqueLabelers:uniq(rows,'Labeler Name'),'Distinct labelers in the current selection.','#0a9d8c'],
+ ['Avg submit / labeler',window._firstDataReady||rawRows.length?catSummary.overall.avgSubmit:null,'Average submission tasks per unique labeler.','#df8b24'],
+ ['Active queues',uniq(rows,'Queue Name'),'Distinct non-empty queues in the current selection.','#df5c99']
+];
+overview.innerHTML='<div class="ux-heading"><div><div class="ux-eyebrow">Performance at a glance</div><h2>Productivity dashboard</h2><p>Explore your team’s output, one insight at a time.</p></div><div class="ux-tools"><label>From<input type="date" id="uxFrom" aria-label="Start date"></label><label>To<input type="date" id="uxTo" aria-label="End date"></label><button class="btn" id="uxRange">Apply range</button><button class="btn" id="uxCSV">↓ CSV</button><button class="btn" id="uxPrint">Print</button></div></div><div class="ux-grid">'+metrics.map(([label,value,note,tone],i)=>'<article class="ux-kpi" style="--tone:'+tone+'"><div class="ux-flipper"><div class="ux-face"><span class="ux-label" title="'+note+'">'+label+'</span><button class="ux-flip" data-flip="'+i+'" aria-label="Show '+label+' details" aria-expanded="false">↗</button><strong '+(value===null?'':'data-count="'+value+'"')+'>'+ (value===null?'—':value.toLocaleString())+'</strong><span class="ux-note">'+(value===null?(window._firstDataReady?'Column unavailable':'Waiting for data'):'Current filtered selection')+'</span>'+(i===0?spark(last):'<span class="ux-note" style="margin-top:auto;color:'+tone+'">'+(rows.length?'Live data · filtered view':'No matching data')+'</span>')+'</div><div class="ux-face ux-back" inert><b>'+label+'</b><p>'+note+'</p><span class="ux-note">'+(value===null?'Required column is missing.':'No previous-period comparison is assumed.')+'</span><button class="btn" data-unflip="'+i+'">Back</button></div></div></article>').join('')+'</div>'
++renderCategoryCardsHTML(catSummary,'','overview')
++'<div class="ux-panels"><section class="ux-panel"><h3>Submission activity</h3><p>Latest 21 dates with activity. Select a bar to drill into that date.</p><div class="ux-bars">'+(last.length?last.map(([d,c])=>'<button class="ux-bar" style="height:'+Math.max(5,c/max*100)+'%" data-date="'+d+'" title="'+d+': '+c+' submissions" aria-label="'+d+', '+c+' submissions. Filter by this date."></button>').join(''):'<div class="ux-empty">No dated submissions match your selection. Adjust or clear the filters.</div>')+'</div><details><summary>View chart values</summary>'+last.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</details></section><section class="ux-panel"><h3>Personal submission target</h3><p>A target for this filtered selection, saved on this browser.</p><label class="ux-note">Target rows<input class="ux-target" id="uxTarget" type="number" min="1" step="1" placeholder="Set your target" value="'+(target||'')+'"></label><div id="uxProgress"></div></section></div><div class="ux-view-tabs" role="tablist" aria-label="Dashboard view"><button class="btn" role="tab" data-view="summary">Summary</button><button class="btn" role="tab" data-view="details">Details & tables</button><button class="btn" role="tab" data-view="both">Expanded view</button><button class="btn" id="uxCompare">Compare periods</button></div>';
 if(selD.size){const dates=[...selD].sort();$('uxFrom').value=dates[0];$('uxTo').value=dates[dates.length-1];}
 overview.querySelectorAll('[data-flip]').forEach(b=>b.onclick=()=>flip(b.dataset.flip,true));overview.querySelectorAll('[data-unflip]').forEach(b=>b.onclick=()=>flip(b.dataset.unflip,false));
 function flip(i,on){const card=overview.querySelectorAll('.ux-kpi')[i];card.classList.toggle('flipped',on);card.querySelector('.ux-face:not(.ux-back)').inert=on;card.querySelector('.ux-back').inert=!on;card.querySelector('[data-flip]').setAttribute('aria-expanded',String(on));card.querySelector(on?'[data-unflip]':'[data-flip]').focus();}
 overview.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;applyView();});
 overview.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>{selD.clear();selWeeks.clear();selD.add(b.dataset.date);view='both';buildStrip();applyAll();});
+overview.querySelectorAll('.an-cat-card[data-cat]').forEach(card=>{
+ const cat=card.dataset.cat;
+ card.onclick=()=>{analysisFilters.category=cat;location.hash='analysis-overview';};
+ card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.onclick();}};
+});
 $('uxRange').onclick=()=>{const from=$('uxFrom').value,to=$('uxTo').value;if(!from||!to||from>to){showToast('Choose a valid start and end date.');return;}selD.clear();selWeeks.clear();const dates=(sOpts._dates||[]).filter(d=>d>=from&&d<=to);if(!dates.length){selD.add(from);}else dates.forEach(d=>selD.add(d));buildStrip();applyAll();};
 $('uxTarget').onchange=e=>{target=Math.max(0,Math.floor(Number(e.target.value)||0));try{localStorage.setItem('meeg_personal_target',String(target));}catch(e){}progress(rows.length);};
 $('uxCSV').onclick=exportCSV;$('uxPrint').onclick=()=>window.print();$('uxCompare').onclick=()=>{if(!cmpMode)toggleCompare();$('cmpBar').scrollIntoView({behavior:reduced()?'instant':'smooth'});};progress(rows.length);applyView();animate();
@@ -163,20 +273,35 @@ function enableAnalysisFlips(rows){
 
 function renderAnalysis(){
 if(analysis.hidden)return;
- const base=rowsInView(),a=analysisAggregate(base,analysisFilters),labelerMetrics=labelerSubmissionMetrics(a.selected),si=hdrs.findIndex(h=>h.toLowerCase()==='shift');
+ const base=rowsInView(),a=analysisAggregate(base,analysisFilters),catSummary=getCategorySummary(a.selected),labelerMetrics=labelerSubmissionMetrics(a.selected),si=hdrs.findIndex(h=>h.toLowerCase()==='shift');
  const shifts=[...new Set(base.map(r=>si>=0?String(r[si]||'').trim():'').filter(Boolean))].sort();const top=a.points.length?[...a.points].sort((a,b)=>b[1]-a[1])[0]:null;
  const palette=['#7258f5','#15b8a6','#ed9a35','#e9689e','#459ce8','#9ca53c','#b77bdb','#7689a3'];
- analysis.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Team output · live insights</div><h2>Analysis Overview</h2><p>Submission trends and shift contribution · one row = one submit</p></div><button class="btn" id="anRefresh">↻ Refresh data</button></div><div class="ux-panel an-filters"><label>From<input id="anFrom" type="date" value="'+analysisFilters.from+'"></label><label>To<input id="anTo" type="date" value="'+analysisFilters.to+'"></label><label>Modality<select id="anMod"><option value="all">All modalities</option><option value="lane">Lane Line</option></select></label><label>Shift<select id="anShift"><option value="">All shifts</option>'+shifts.map(s=>'<option>'+esc(s)+'</option>').join('')+'</select></label><button class="btn btn-c" id="anApply">Apply filters</button><button class="btn" id="anReset">Reset</button><button class="btn" id="anDashboard">Dashboard filters ↗</button></div><p class="an-context">Uses current dashboard filters'+(activeLoc&&!activeLoc.startsWith('__')?' · '+esc(activeLoc):'')+'. These filters narrow that selection.</p><div class="ux-grid an-metrics">'+[['Total submit',a.selected.length,'Filtered submission rows'],['Total Unique QTC',uniqueQtcCount(a.selected)??'—','Distinct Qtc Name · current filters'],['Unique labelers',labelerMetrics.unique===null?'—':labelerMetrics.unique,labelerMetrics.unique===null?'National Id column unavailable':labelerMetrics.missingNames+' rows without a valid 14-digit National Id excluded'],...[['Lidar FP','lidarFP'],['Lidar QA','lidarQA'],['Lane Line FP','laneFP'],['Lane Line QA','laneQA']].flatMap(([label,key])=>[[label+' submit',labelerMetrics.categoryColumns?labelerMetrics.totals[key]:'—','Submit rows · current filters'],['Unique labelers · '+label,labelerMetrics.categoryColumns&&labelerMetrics.categoryUnique[key]!==null?labelerMetrics.categoryUnique[key]:'—','Distinct valid National Id within this category']]),['Lane Line submit',a.lane===null?'—':a.lane,'Modality = Lane Line'],['Top day',top&&top[1]?top[0]:'—',top?top[1].toLocaleString()+' submissions':'No dated submissions'],['Leading shift',a.shifts.length?a.shifts[0][0]:'—',a.shifts.length?a.shifts[0][1].toLocaleString()+' submissions':'No submissions']].map(([label,val,note])=>{
- const category=[['Lidar FP','lidarFP'],['Lidar QA','lidarQA'],['Lane Line FP','laneFP'],['Lane Line QA','laneQA']].find(([name])=>label===name+' submit'||label==='Unique labelers · '+name);
- const tip=category&&labelerMetrics.categoryColumns?'Total Submit · '+category[0]+': '+labelerMetrics.totals[category[1]].toLocaleString():'';
- const tipId=category?'an-tip-'+category[1]+(label.startsWith('Unique')?'-unique':'-submit'):'';
- return '<article class="ux-panel'+(tip?' an-tip-card':'')+'"'+(tip?' tabindex="0" aria-describedby="'+tipId+'"':'')+'><span class="ux-label">'+label+'</span><strong class="an-value">'+esc(typeof val==='number'?val.toLocaleString():val)+'</strong><p>'+esc(note)+'</p>'+(tip?'<span class="an-tooltip" role="tooltip" id="'+tipId+'">'+esc(tip)+'</span>':'')+'</article>';
- }).join('')+'</div><div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><p>Click a date to filter. Hover or focus for the four category totals.</p><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
+ const kpis=[
+  ['Total submit',a.selected.length,'Filtered submission rows'],
+  ['Total Unique QTC',uniqueQtcCount(a.selected)??'—','Distinct Qtc Name · current filters'],
+  ['Unique labelers',catSummary.overall.uniqueLabelers,'Distinct labelers · current filters'],
+  ['Avg submit / labeler',catSummary.overall.avgSubmit,'Average submissions per unique labeler'],
+  ['Top day',top&&top[1]?top[0]:'—',top?top[1].toLocaleString()+' submissions':'No dated submissions'],
+  ['Leading shift',a.shifts.length?a.shifts[0][0]:'—',a.shifts.length?a.shifts[0][1].toLocaleString()+' submissions':'No submissions']
+ ];
+ analysis.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Team output · live insights</div><h2>Analysis Overview</h2><p>Submission trends and shift contribution · one row = one submit</p></div><button class="btn" id="anRefresh">↻ Refresh data</button></div><div class="ux-panel an-filters"><label>From<input id="anFrom" type="date" value="'+analysisFilters.from+'"></label><label>To<input id="anTo" type="date" value="'+analysisFilters.to+'"></label><label>Modality<select id="anMod"><option value="all">All modalities</option><option value="lane">Lane Line</option></select></label><label>Shift<select id="anShift"><option value="">All shifts</option>'+shifts.map(s=>'<option>'+esc(s)+'</option>').join('')+'</select></label><button class="btn btn-c" id="anApply">Apply filters</button><button class="btn" id="anReset">Reset</button><button class="btn" id="anDashboard">Dashboard filters ↗</button></div><p class="an-context">Uses current dashboard filters'+(activeLoc&&!activeLoc.startsWith('__')?' · '+esc(activeLoc):'')+'. These filters narrow that selection.</p>'
+  +renderCategoryCardsHTML(catSummary,analysisFilters.category,'analysis')
+  +'<div class="ux-grid an-metrics">'+kpis.map(([label,val,note])=>'<article class="ux-panel"><span class="ux-label">'+label+'</span><strong class="an-value">'+esc(typeof val==='number'?val.toLocaleString():val)+'</strong><p>'+esc(note)+'</p></article>').join('')+'</div>'
+  +'<div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><p>Click a date to filter. Hover or focus for the four category totals.</p><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
+ analysis.querySelectorAll('.an-cat-card[data-cat]').forEach(card=>{
+  const cat=card.dataset.cat;
+  card.onclick=()=>{
+   analysisFilters.category=analysisFilters.category===cat?'':cat;
+   renderAnalysis();
+  };
+  card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.onclick();}};
+ });
  enableAnalysisFlips(a.selected);
  const oldFilterBar=analysis.querySelector('.an-filters');oldFilterBar.replaceWith(createListSlicers());
  const resetBar=document.createElement('div');resetBar.className='an-selection-toolbar';
  const resetButton=document.createElement('button');resetButton.className='btn';resetButton.textContent='Clear all filters';resetButton.onclick=()=>{Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''});clearAll();refreshOpenSlicers();};
- const selectionText=document.createElement('span');selectionText.className='ux-note';selectionText.textContent=[analysisFilters.from&&('Date: '+analysisFilters.from+(analysisFilters.to!==analysisFilters.from?' → '+analysisFilters.to:'')),analysisFilters.shift,analysisFilters.unit,analysisFilters.qtc,analysisFilters.category].filter(Boolean).join(' · ')||'Select multiple values · changes apply immediately';resetBar.append(selectionText,resetButton);analysis.querySelector('.an-context').replaceWith(resetBar);$('anRefresh').onclick=()=>loadData();
+ const catLabel={'lidarFP':'Lidar FP','lidarQA':'Lidar QA','laneFP':'Lane Line FP','laneQA':'Lane Line QA'}[analysisFilters.category]||analysisFilters.category;
+ const selectionText=document.createElement('span');selectionText.className='ux-note';selectionText.textContent=[analysisFilters.from&&('Date: '+analysisFilters.from+(analysisFilters.to!==analysisFilters.from?' → '+analysisFilters.to:'')),analysisFilters.shift,analysisFilters.unit,analysisFilters.qtc,catLabel].filter(Boolean).join(' · ')||'Select multiple values · changes apply immediately';resetBar.append(selectionText,resetButton);analysis.querySelector('.an-context').replaceWith(resetBar);$('anRefresh').onclick=()=>loadData();
  if(!a.selected.length){$('anLine').innerHTML='<div class="ux-empty">'+(window._firstDataReady?'No submissions match these filters.':'Waiting for dashboard data…')+'</div>';$('anDonut').innerHTML='<div class="ux-empty">No shift distribution available.</div>';addAnalysisCharts(a);return;}
  if(!a.points.length)$('anLine').innerHTML='<div class="ux-empty">No valid dates available.</div>';
  else{
@@ -280,160 +405,317 @@ function renderDailyReport(){
 const report=dailyQueueReport(rowsInView(),rawRows);const days=[...selD].sort();
  page.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Queue activity · FP / QA</div><h2>Daily Report</h2><p>'+esc(days.length===1?days[0]:days.length?days[0]+' → '+days[days.length-1]:'All dates · choose a day from the shared date filter above')+'</p></div><button class="btn" id="dailyRefresh">↻ Refresh data</button></div><div id="dailyShift"></div><section class="ux-panel"><h3>Queue daily summary</h3><p>Unique Labelers use valid National Id, once per Queue + Modality + Pass. Queues with zero FP and QA submissions are hidden.</p><div class="perf-table daily-table"><table><thead><tr><th>Queue</th><th>Unique Labelers (FP)</th><th>Total Submit (FP)</th><th>Unique Labelers (QA)</th><th>Total Submit (QA)</th></tr></thead><tbody>'+report.groups.filter(g=>g.fp>0||g.qa>0).map(g=>'<tr><td>'+esc(g.name)+' <span class="daily-mod '+(g.mod==='Lidar'?'daily-lidar':'daily-lane')+'">('+esc(g.mod)+')</span></td><td>'+(report.hasNational?g.fpIds.size.toLocaleString():'—')+'</td><td>'+g.fp.toLocaleString()+'</td><td>'+(report.hasNational?g.qaIds.size.toLocaleString():'—')+'</td><td>'+g.qa.toLocaleString()+'</td></tr>').join('')+'</tbody></table>'+(!report.hasQueue||!report.hasPass?'<p class="ux-empty">Queue Name and Pass columns are required.</p>':report.groups.some(g=>g.fp>0||g.qa>0)?'':'<p class="ux-empty">No queue submissions match the current filters.</p>')+'</div><p class="an-context">'+report.groups.reduce((n,g)=>n+g.missing,0)+' FP/QA entries have missing or invalid National Id; included in submit totals, excluded from unique counts.</p></section></div>';
  const slicers=createListSlicers();[...slicers.children].slice(1).forEach(el=>el.remove());$('dailyShift').appendChild(slicers);$('dailyRefresh').onclick=()=>loadData();
-}
-
-const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady)renderDailyReport();});sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
-
-/* Bound source requests and worker parsing; keep the same sheet and session. */
-async function fetchSheetText(url,timeoutMs=45000){
- const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
- try{
-   const response=await fetch(url,{cache:'no-store',signal:controller.signal});
-   if(!response.ok)throw new Error('HTTP '+response.status);
-   const text=await response.text();
-   if(/^\s*</.test(text))throw new Error('Google returned a sign-in or error page instead of CSV');
-   const firstLine=text.slice(0,text.indexOf('\n')>=0?text.indexOf('\n')+1:text.length);
-   const first=parseCSV(firstLine)[0]||[];
-   if(!first.some(h=>String(h).trim().toLowerCase()==='queue name')||!first.some(h=>String(h).trim().toLowerCase()==='pass'))throw new Error('The source response is missing Queue Name or Pass');
-   return text;
- }catch(e){
-   if(e.name==='AbortError')throw new Error('Source request timed out');
-   throw e;
- }finally{clearTimeout(timer);}
-}
-
-const originalCsvParser=parseCSVAsync;
-parseCSVAsync=function(text){
- return new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>{
-     try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(e);}
-   },15000);
-   Promise.resolve().then(()=>originalCsvParser(text)).then(table=>{
-     clearTimeout(timer);resolve(table);
-   },error=>{
-     clearTimeout(timer);
-     try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(error);}
-   });
- });
-};
-
-let sheetLoadPromise=null;
-let _instantCacheAttempted=false;
-
-loadData=function(){
- if(sheetLoadPromise)return sheetLoadPromise;
- if(!getLoggedInEmail()){showToast('Sign in to load dashboard data.');return Promise.resolve();}
- const button=$('refreshBtn');setSyncActive(true);setTrafficLight('yellow');if(button)button.disabled=true;
-
- // Fast cache hydration: immediately render from IndexedDB if memory is empty
- if(!rawRows.length&&!_instantCacheAttempted){
-   _instantCacheAttempted=true;
-   idbGet('csv').then(cached=>{
-     if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
-       parseCSVAsync(cached.text).then(table=>{
-         if(!rawRows.length&&table&&table.length){
-           onCsvTable(table);
-           setTrafficLight('yellow');
-           showToast('⚡ Showing cached data — syncing latest updates…');
-         }
-       }).catch(()=>{});
-     }
-   }).catch(()=>{});
- }
-
- if(!rawRows.length)$('mainContent').innerHTML='<div class="loader"><div class="spin"></div><span class="ltxt">Loading source data…</span></div>';
- 
- const base='https://docs.google.com/spreadsheets/d/'+SHEET_ID;
- const cleanQuery=encodeURIComponent('select * where A is not null');
- const urls=[
-   base+'/gviz/tq?tqx=out:csv&headers=1&tq='+cleanQuery+(SHEET_GID?'&gid='+encodeURIComponent(SHEET_GID):''),
-   base+'/export?format=csv&gid='+encodeURIComponent(SHEET_GID),
-   base+'/gviz/tq?tqx=out:csv&headers=1&gid='+encodeURIComponent(SHEET_GID)
- ];
-
- sheetLoadPromise=(async()=>{
-   let failure;
-   for(const url of urls){
-     try{
-       const text=await fetchSheetText(url,45000);
-       const hash=simpleHash(text);
-       if(hash===_lastCsvHash&&rawRows.length){
-         lastUpdateTs=Date.now();
-         updateRelativeTime();
-         setTrafficLight('green');
-         return;
-       }
-       const table=await parseCSVAsync(text);
-       onCsvTable(table);
-       _lastCsvHash=hash;
-       idbSet('csv',{v:AUTH_VER,ts:Date.now(),text});
-       setTrafficLight('green');
-       return;
-     }catch(e){
-       failure=e;
-     }
-   }
-
-   if(!rawRows.length){
-     const cached=await idbGet('csv');
-     if(cached&&cached.v===AUTH_VER&&cached.text){
-       try{
-         onCsvTable(await parseCSVAsync(cached.text));
-         setTrafficLight('yellow');
-         showToast('Showing saved data. Google could not be reached.');
-         return;
-       }catch(e){}
-     }
-     showErr('Could not load the Google Sheet: '+(failure?.message||'Network error')+'. Check your connection and sheet viewing access, then retry.');
-   }else{
-     setTrafficLight('red');
-     showToast('Refresh failed — keeping the last loaded data.');
-   }
- })().finally(()=>{
-   sheetLoadPromise=null;
-   setSyncActive(false);
-   if(button)button.disabled=false;
-   renderAllSections();
- });
-
- return sheetLoadPromise;
-};
-
-const rowDates=new WeakMap();
-const uncachedRowDate=rDate;
-rDate=function(row){
- const source=tsIdx>=0?row[tsIdx]:undefined;
- const hit=rowDates.get(row);
- if(hit&&hit.column===tsIdx&&hit.source===source)return hit.value;
- const value=uncachedRowDate(row);
- rowDates.set(row,{column:tsIdx,source,value});
- return value;
-};
-
-const oldRender=renderAllSections;
-renderAllSections=function(){
- if(!root.hidden)oldRender.apply(this,arguments);
- renderSharedPeriods();
- renderOverview();
- renderAnalysis();
- renderPerformance();
- renderDailyReport();
-};
-
-// Immediate instant hydration check on script load
-try{
- idbGet('csv').then(cached=>{
-   if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
-     parseCSVAsync(cached.text).then(table=>{
-       if(!rawRows.length&&table&&table.length){
-         onCsvTable(table);
-         renderAllSections();
-       }
-     }).catch(()=>{});
-   }
- }).catch(()=>{});
-}catch(e){}
-
-renderOverview();
-renderSharedPeriods();
-})();
+}
+
+
+
+const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady)renderDailyReport();});sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
+
+
+
+/* Bound source requests and worker parsing; keep the same sheet and session. */
+
+async function fetchSheetText(url,timeoutMs=45000){
+
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
+
+ try{
+
+   const response=await fetch(url,{cache:'no-store',signal:controller.signal});
+
+   if(!response.ok)throw new Error('HTTP '+response.status);
+
+   const text=await response.text();
+
+   if(/^\s*</.test(text))throw new Error('Google returned a sign-in or error page instead of CSV');
+
+   const firstLine=text.slice(0,text.indexOf('\n')>=0?text.indexOf('\n')+1:text.length);
+
+   const first=parseCSV(firstLine)[0]||[];
+
+   if(!first.some(h=>String(h).trim().toLowerCase()==='queue name')||!first.some(h=>String(h).trim().toLowerCase()==='pass'))throw new Error('The source response is missing Queue Name or Pass');
+
+   return text;
+
+ }catch(e){
+
+   if(e.name==='AbortError')throw new Error('Source request timed out');
+
+   throw e;
+
+ }finally{clearTimeout(timer);}
+
+}
+
+
+
+const originalCsvParser=parseCSVAsync;
+
+parseCSVAsync=function(text){
+
+ return new Promise((resolve,reject)=>{
+
+   const timer=setTimeout(()=>{
+
+     try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(e);}
+
+   },15000);
+
+   Promise.resolve().then(()=>originalCsvParser(text)).then(table=>{
+
+     clearTimeout(timer);resolve(table);
+
+   },error=>{
+
+     clearTimeout(timer);
+
+     try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(error);}
+
+   });
+
+ });
+
+};
+
+
+
+let sheetLoadPromise=null;
+
+let _instantCacheAttempted=false;
+
+
+
+loadData=function(){
+
+ if(sheetLoadPromise)return sheetLoadPromise;
+
+ if(!getLoggedInEmail()){showToast('Sign in to load dashboard data.');return Promise.resolve();}
+
+ const button=$('refreshBtn');setSyncActive(true);setTrafficLight('yellow');if(button)button.disabled=true;
+
+
+
+ // Fast cache hydration: immediately render from IndexedDB if memory is empty
+
+ if(!rawRows.length&&!_instantCacheAttempted){
+
+   _instantCacheAttempted=true;
+
+   idbGet('csv').then(cached=>{
+
+     if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
+
+       parseCSVAsync(cached.text).then(table=>{
+
+         if(!rawRows.length&&table&&table.length){
+
+           onCsvTable(table);
+
+           setTrafficLight('yellow');
+
+           showToast('⚡ Showing cached data — syncing latest updates…');
+
+         }
+
+       }).catch(()=>{});
+
+     }
+
+   }).catch(()=>{});
+
+ }
+
+
+
+ if(!rawRows.length)$('mainContent').innerHTML='<div class="loader"><div class="spin"></div><span class="ltxt">Loading source data…</span></div>';
+
+ 
+
+ const base='https://docs.google.com/spreadsheets/d/'+SHEET_ID;
+
+ const cleanQuery=encodeURIComponent('select * where A is not null');
+
+ const urls=[
+
+   base+'/gviz/tq?tqx=out:csv&headers=1&tq='+cleanQuery+(SHEET_GID?'&gid='+encodeURIComponent(SHEET_GID):''),
+
+   base+'/export?format=csv&gid='+encodeURIComponent(SHEET_GID),
+
+   base+'/gviz/tq?tqx=out:csv&headers=1&gid='+encodeURIComponent(SHEET_GID)
+
+ ];
+
+
+
+ sheetLoadPromise=(async()=>{
+
+   let failure;
+
+   for(const url of urls){
+
+     try{
+
+       const text=await fetchSheetText(url,45000);
+
+       const hash=simpleHash(text);
+
+       if(hash===_lastCsvHash&&rawRows.length){
+
+         lastUpdateTs=Date.now();
+
+         updateRelativeTime();
+
+         setTrafficLight('green');
+
+         return;
+
+       }
+
+       const table=await parseCSVAsync(text);
+
+       onCsvTable(table);
+
+       _lastCsvHash=hash;
+
+       idbSet('csv',{v:AUTH_VER,ts:Date.now(),text});
+
+       setTrafficLight('green');
+
+       return;
+
+     }catch(e){
+
+       failure=e;
+
+     }
+
+   }
+
+
+
+   if(!rawRows.length){
+
+     const cached=await idbGet('csv');
+
+     if(cached&&cached.v===AUTH_VER&&cached.text){
+
+       try{
+
+         onCsvTable(await parseCSVAsync(cached.text));
+
+         setTrafficLight('yellow');
+
+         showToast('Showing saved data. Google could not be reached.');
+
+         return;
+
+       }catch(e){}
+
+     }
+
+     showErr('Could not load the Google Sheet: '+(failure?.message||'Network error')+'. Check your connection and sheet viewing access, then retry.');
+
+   }else{
+
+     setTrafficLight('red');
+
+     showToast('Refresh failed — keeping the last loaded data.');
+
+   }
+
+ })().finally(()=>{
+
+   sheetLoadPromise=null;
+
+   setSyncActive(false);
+
+   if(button)button.disabled=false;
+
+   renderAllSections();
+
+ });
+
+
+
+ return sheetLoadPromise;
+
+};
+
+
+
+const rowDates=new WeakMap();
+
+const uncachedRowDate=rDate;
+
+rDate=function(row){
+
+ const source=tsIdx>=0?row[tsIdx]:undefined;
+
+ const hit=rowDates.get(row);
+
+ if(hit&&hit.column===tsIdx&&hit.source===source)return hit.value;
+
+ const value=uncachedRowDate(row);
+
+ rowDates.set(row,{column:tsIdx,source,value});
+
+ return value;
+
+};
+
+
+
+const oldRender=renderAllSections;
+
+renderAllSections=function(){
+
+ if(!root.hidden)oldRender.apply(this,arguments);
+
+ renderSharedPeriods();
+
+ renderOverview();
+
+ renderAnalysis();
+
+ renderPerformance();
+
+ renderDailyReport();
+
+};
+
+
+
+// Immediate instant hydration check on script load
+
+try{
+
+ idbGet('csv').then(cached=>{
+
+   if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
+
+     parseCSVAsync(cached.text).then(table=>{
+
+       if(!rawRows.length&&table&&table.length){
+
+         onCsvTable(table);
+
+         renderAllSections();
+
+       }
+
+     }).catch(()=>{});
+
+   }
+
+ }).catch(()=>{});
+
+}catch(e){}
+
+
+
+renderOverview();
+
+renderSharedPeriods();
+
+})();
+
