@@ -138,6 +138,21 @@ function createListSlicers(){
 }
 function refreshOpenSlicers(){if(filterDrawer.open)renderDrawerAnalysis();}
 
+function enableAnalysisFlips(rows){
+ analysis.querySelectorAll('.an-metrics > article').forEach(card=>{
+ const label=card.querySelector('.ux-label')?.textContent||'Metric';const note=card.querySelector('p')?.textContent||'';
+ const category=[['Lidar FP','lidarFP'],['Lidar QA','lidarQA'],['Lane Line FP','laneFP'],['Lane Line QA','laneQA']].find(([name])=>label.includes(name));
+ const mi=hdrs.findIndex(h=>h.trim().toLowerCase()==='modality'),pi=hdrs.findIndex(h=>h.trim().toLowerCase()==='pass');const relevant=category?rows.filter(r=>{const mod=String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'');return (mod==='lidar'?'lidar':mod==='laneline'?'lane':'')+String(r[pi]||'').trim().toUpperCase()===category[1];}):rows;const metrics=labelerSubmissionMetrics(relevant);
+ const front=document.createElement('div');front.className='an-flip-front';while(card.firstChild)front.appendChild(card.firstChild);
+ const back=document.createElement('div');back.className='an-flip-back';back.inert=true;const title=document.createElement('b');title.textContent=label;const description=document.createElement('p');description.textContent=note;back.append(title,description);
+ [['Total Submit',relevant.length],['Unique Labelers',metrics.unique??'—'],['Unique QTC',uniqueQtcCount(relevant)??'—']].forEach(([key,value])=>{const line=document.createElement('p');line.textContent=key+': '+(typeof value==='number'?value.toLocaleString():value);back.appendChild(line);});
+ const hint=document.createElement('span');hint.className='ux-note';hint.textContent='Current filters · click to return';back.appendChild(hint);
+ const inner=document.createElement('div');inner.className='an-flip-inner';inner.append(front,back);card.appendChild(inner);card.classList.add('an-flip-card');card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',label+' — flip for filtered details');card.setAttribute('aria-pressed','false');
+ const cue=document.createElement('span');cue.className='an-flip-cue';cue.textContent='↻';cue.setAttribute('aria-hidden','true');card.appendChild(cue);
+ const toggle=()=>{const flipped=card.classList.toggle('an-is-flipped');front.inert=flipped;back.inert=!flipped;card.setAttribute('aria-pressed',String(flipped));};card.onclick=toggle;card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}if(e.key==='Escape'&&card.classList.contains('an-is-flipped'))toggle();};
+ });
+}
+
 function renderAnalysis(){
  const base=rowsInView(),a=analysisAggregate(base,analysisFilters),labelerMetrics=labelerSubmissionMetrics(a.selected),si=hdrs.findIndex(h=>h.toLowerCase()==='shift');
  const shifts=[...new Set(base.map(r=>si>=0?String(r[si]||'').trim():'').filter(Boolean))].sort();const top=a.points.length?[...a.points].sort((a,b)=>b[1]-a[1])[0]:null;
@@ -148,6 +163,7 @@ function renderAnalysis(){
  const tipId=category?'an-tip-'+category[1]+(label.startsWith('Unique')?'-unique':'-submit'):'';
  return '<article class="ux-panel'+(tip?' an-tip-card':'')+'"'+(tip?' tabindex="0" aria-describedby="'+tipId+'"':'')+'><span class="ux-label">'+label+'</span><strong class="an-value">'+esc(typeof val==='number'?val.toLocaleString():val)+'</strong><p>'+esc(note)+'</p>'+(tip?'<span class="an-tooltip" role="tooltip" id="'+tipId+'">'+esc(tip)+'</span>':'')+'</article>';
  }).join('')+'</div><div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><p>Click a date to filter. Hover or focus for the four category totals.</p><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
+ enableAnalysisFlips(a.selected);
  const oldFilterBar=analysis.querySelector('.an-filters');oldFilterBar.replaceWith(createListSlicers());
  const resetBar=document.createElement('div');resetBar.className='an-selection-toolbar';
  const resetButton=document.createElement('button');resetButton.className='btn';resetButton.textContent='Clear all filters';resetButton.onclick=()=>{Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''});clearAll();refreshOpenSlicers();};
