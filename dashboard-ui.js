@@ -277,6 +277,6 @@ const report=dailyQueueReport(rowsInView(),rawRows);const days=[...selD].sort();
 }
 
 const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady)renderDailyReport();});sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
-const oldRender=renderAllSections;renderAllSections=function(){oldRender.apply(this,arguments);renderOverview();renderAnalysis();renderPerformance();renderDailyReport();renderSharedPeriods();};
+const oldRender=renderAllSections;renderAllSections=function(){oldRender.apply(this,arguments);renderSharedPeriods();renderOverview();renderAnalysis();renderPerformance();renderDailyReport();};
 renderOverview();renderSharedPeriods();
 })();
