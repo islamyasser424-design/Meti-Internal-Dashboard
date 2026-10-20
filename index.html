@@ -578,6 +578,32 @@ td a{color:var(--info);text-decoration:none;font-weight:700;}
 @media(max-width:360px){
   .meeg-wordmark .brand{font-size:1rem}
 }
+
+/* Compact two-column date range picker */
+#fg___date .calendar-panel{width:430px;max-width:min(94vw,430px);padding:0;overflow:visible;background:#fff;color:#202124;border:1px solid #dadce0;box-shadow:0 8px 22px rgba(0,0,0,.18);border-radius:10px;z-index:110}
+.calendar-panel .cal-top{display:flex;align-items:center;gap:12px;padding:9px 14px;background:#f3f3f3;border-radius:10px 10px 0 0}
+.calendar-panel .cal-preset{min-width:130px;text-align:left;padding:7px 10px;border:1px solid #aaa;border-radius:4px;background:transparent;color:#202124;cursor:pointer}
+.calendar-panel .cal-hint{font-size:11px;color:#666}
+.calendar-panel .cal-columns{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 14px 4px}
+.calendar-panel .cal-month{min-width:0}
+.calendar-panel .cal-month-head{text-align:center;font-size:12px;padding-bottom:8px}
+.calendar-panel .cal-nav{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:12px}
+.calendar-panel .cal-nav strong{font-weight:500;white-space:nowrap}
+.calendar-panel .cal-nav button{border:0;background:none;font-size:23px;cursor:pointer;color:#222;width:26px;height:26px;line-height:20px}
+.calendar-panel .cal-weekdays,.calendar-panel .cal-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+.calendar-panel .cal-weekdays{border-bottom:1px solid #ddd;padding-bottom:7px;font-size:10px;color:#777}
+.calendar-panel .cal-days{padding-top:4px;row-gap:2px}
+.calendar-panel .cal-days .cal-day{border:0;background:transparent;color:#262626;width:26px;height:26px;max-width:100%;margin:auto;font-size:12px;cursor:pointer;border-radius:50%;font-family:Arial,sans-serif;padding:0}
+.calendar-panel .cal-days .cal-day:hover{background:#e7edf8}
+.calendar-panel .cal-days .cal-day.in-range{border-radius:0;background:#e1ebff}
+.calendar-panel .cal-days .cal-day.selected{background:#1769df;color:#fff;border-radius:50%}
+.calendar-panel .cal-days .cal-day.is-today:not(.selected){outline:1px solid #1769df;outline-offset:-2px}
+.calendar-panel .cal-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 12px 9px}
+.calendar-panel .cal-actions button{border:0;background:transparent;padding:9px 14px;border-radius:30px;cursor:pointer;font-size:12px;color:#222}
+.calendar-panel .cal-actions .cal-apply{background:#efefef;font-weight:600}
+html[data-theme="dark"] #fg___date .calendar-panel{background:#fff;color:#202124}
+@media(max-width:520px){#fg___date .calendar-panel{width:min(94vw,430px);left:0;right:auto}.calendar-panel .cal-columns{gap:4px;padding:8px}.calendar-panel .cal-days .cal-day{width:24px;height:24px;font-size:11px}}
+
 </style>
 <link rel="stylesheet" href="dashboard-ui.css?v=20261020-fast-v4"/>
 </head>
@@ -2276,18 +2302,78 @@ function setSyncActive(v){const b=document.getElementById('syncBar');if(b)b.clas
 function setTrafficLight(state){['tlRed','tlYellow','tlGreen'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('active');});const map={red:'tlRed',yellow:'tlYellow',green:'tlGreen'};const el=document.getElementById(map[state]);if(el)el.classList.add('active');}
 function getMondayStr(d){if(!d||!d.match(/^\d{4}-\d{2}-\d{2}$/))return'';const dt=new Date(d+'T12:00:00');const day=dt.getDay();const diff=day===0?-6:1-day;const mon=new Date(dt);mon.setDate(dt.getDate()+diff);return mon.toISOString().substring(0,10);}
 function getWeekLabel(d){const m=getMondayStr(d);return m?'Week of Mon '+m:d;}
-function buildStrip(){const s=document.getElementById('fstrip');const dates=sOpts._dates||[];let h='';if(dates.length){window._weekList=[];const weekMap={};dates.forEach(d=>{const lbl=getWeekLabel(d);if(!weekMap[lbl]){weekMap[lbl]=[];window._weekList.push(lbl);}weekMap[lbl].push(d);});window._weekList.sort().reverse();window._weekMap=weekMap;const wCnt=selWeeks.size;h+=`<div class="fg" id="fg___week"><div class="fchip${wCnt?' has-sel':''}" id="fc___week" onclick="tgDrop('__week')">📅 Week${wCnt?` <span class="chk-cnt">${wCnt}</span>`:''} <span class="chk-arr">▾</span></div><div class="dpanel" id="dp___week">${window._weekList.length>5?`<input class="dp-srch" placeholder="Search week…" oninput="rdropWeek()" id="ds___week"/>`:''}<div class="dp-list" id="dl___week"></div><div class="dp-foot"><button onclick="clrWeeks();event.stopPropagation()">✕ Clear</button><button onclick="closeDr('__week');event.stopPropagation()">✓ Done</button></div></div></div>`;const dCnt=selD.size;h+=`<div class="fg" id="fg___date"><div class="fchip${dCnt?' has-sel':''}" id="fc___date" onclick="tgDrop('__date')">📆 Date${dCnt?` <span class="chk-cnt">${dCnt}</span>`:''} <span class="chk-arr">▾</span></div><div class="dpanel" id="dp___date"><input class="dp-srch" placeholder="Search date…" oninput="rdropDate()" id="ds___date"/><div class="dp-list" id="dl___date"></div><div class="dp-foot"><button onclick="clrDates();event.stopPropagation()">✕ Clear</button><button onclick="closeDr('__date');event.stopPropagation()">✓ Done</button></div></div></div>`;h+=timeChipHtml();if(SC.some(c=>(sOpts[c.key]||[]).length))h+=`<div class="fsep"></div>`;}
+function buildStrip(){const s=document.getElementById('fstrip');const dates=sOpts._dates||[];let h='';if(dates.length){window._weekList=[];const weekMap={};dates.forEach(d=>{const lbl=getWeekLabel(d);if(!weekMap[lbl]){weekMap[lbl]=[];window._weekList.push(lbl);}weekMap[lbl].push(d);});window._weekList.sort().reverse();window._weekMap=weekMap;const wCnt=selWeeks.size;h+=`<div class="fg" id="fg___week"><div class="fchip${wCnt?' has-sel':''}" id="fc___week" onclick="tgDrop('__week')">📅 Week${wCnt?` <span class="chk-cnt">${wCnt}</span>`:''} <span class="chk-arr">▾</span></div><div class="dpanel" id="dp___week">${window._weekList.length>5?`<input class="dp-srch" placeholder="Search week…" oninput="rdropWeek()" id="ds___week"/>`:''}<div class="dp-list" id="dl___week"></div><div class="dp-foot"><button onclick="clrWeeks();event.stopPropagation()">✕ Clear</button><button onclick="closeDr('__week');event.stopPropagation()">✓ Done</button></div></div></div>`;const dCnt=selD.size;h+=`<div class="fg" id="fg___date"><div class="fchip${dCnt?' has-sel':''}" id="fc___date" onclick="tgDrop('__date')">📆 Date${dCnt?` <span class="chk-cnt">${dCnt}</span>`:''} <span class="chk-arr">▾</span></div><div class="dpanel calendar-panel" id="dp___date" onclick="event.stopPropagation()"><div class="cal-top"><button class="cal-preset" onclick="calToday()">Today</button><span class="cal-hint">Select a day or date range</span></div><div class="cal-columns" id="dl___date"></div><div class="cal-actions"><button onclick="calCancel()">Cancel</button><button class="cal-apply" onclick="calApply()">Apply</button></div></div></div>`;h+=timeChipHtml();if(SC.some(c=>(sOpts[c.key]||[]).length))h+=`<div class="fsep"></div>`;}
 h+=`<div class="id-filter-box"><input class="id-filter-input" id="idFilterInput" placeholder="🔎 ID…" value="${esc(idFilter)}" oninput="setIdFilter(this.value)"/>${idFilter?`<span class="id-filter-x" onclick="setIdFilter('');document.getElementById('idFilterInput').value=''">✕</span>`:''}<div class="fchip arc-search-btn" title="Search this ID in the Archive" onclick="openArchiveSearch()">📦 Archive</div></div><div class="fsep"></div>`;
 SC.forEach(sc=>{const opts=sOpts[sc.key];if(!opts||!opts.length)return;const cnt=(sel[sc.key]||new Set()).size;h+=`<div class="fg" id="fg_${sid(sc.key)}"><div class="fchip${cnt?' has-sel':''}" id="fc_${sid(sc.key)}" onclick="tgDrop('${sc.key}')">${sc.ic} ${sc.lbl}${cnt?` <span class="chk-cnt">${cnt}</span>`:''} <span class="chk-arr">▾</span></div><div class="dpanel" id="dp_${sid(sc.key)}">${opts.length>7?`<input class="dp-srch" placeholder="Search ${sc.lbl}…" oninput="rdrop('${sc.key}')" id="ds_${sid(sc.key)}"/>`:''}<div class="dp-list" id="dl_${sid(sc.key)}"></div><div class="dp-foot"><button onclick="clrSl('${sc.key}');event.stopPropagation()">✕ Clear</button><button onclick="closeDr('${sc.key}');event.stopPropagation()">✓ Done</button></div></div></div>`;});s.innerHTML=h;injectPresets();rdropWeek();rdropDate();SC.forEach(sc=>rdrop(sc.key));}
 function rdropWeek(){const listEl=document.getElementById('dl___week');if(!listEl)return;const q=(document.getElementById('ds___week')||{}).value||'';const weeks=window._weekList||[];const vis=q?weeks.filter(w=>w.toLowerCase().includes(q.toLowerCase())):weeks;listEl.innerHTML=vis.map(w=>{const on=selWeeks.has(w);const cnt=((window._weekMap||{})[w]||[]).reduce((s,d)=>s+rawRows.filter(r=>isRowAllowed(r)&&rDate(r)===d).length,0);return`<div class="dp-item${on?' on':''}" onclick="tgWeek('${esc(w)}');event.stopPropagation()"><div class="dp-cb">${on?'✓':''}</div><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(w)}</span><span class="dp-cnt">${cnt}</span></div>`;}).join('')||'<div style="padding:8px;font-size:.62rem;color:var(--muted)">No results</div>';}
-function rdropDate(){const listEl=document.getElementById('dl___date');if(!listEl)return;const q=(document.getElementById('ds___date')||{}).value||'';const allDates=sOpts._dates||[];const visDates=selWeeks.size?allDates.filter(d=>selWeeks.has(getWeekLabel(d))):allDates;const vis=q?visDates.filter(d=>d.includes(q)):visDates;listEl.innerHTML=vis.map(d=>{const on=selD.has(d);const cnt=rawRows.filter(r=>isRowAllowed(r)&&rDate(r)===d).length;const star=d===todayStr?' ⭐':'';return`<div class="dp-item${on?' on':''}" onclick="tgDate('${d}');event.stopPropagation()"><div class="dp-cb">${on?'✓':''}</div><span style="flex:1;font-family:var(--mono);font-size:.65rem">${d}${star}</span><span class="dp-cnt">${cnt}</span></div>`;}).join('')||'<div style="padding:8px;font-size:.62rem;color:var(--muted)">No results</div>';}
+/* Dual-month range calendar: picker dates remain drafts until Apply. */
+let calStart='',calEnd='',calMonthA='',calMonthB='',calNextEnd=false;
+function calMonthKey(date){return date.slice(0,7);}
+function calShiftMonth(month,offset){
+  const parts=month.split('-').map(Number);
+  const d=new Date(Date.UTC(parts[0],parts[1]-1+offset,1));
+  return d.toISOString().slice(0,7);
+}
+function calInitialize(){
+  const chosen=[...selD].sort();
+  calStart=chosen[0]||'';calEnd=chosen[chosen.length-1]||calStart;
+  calNextEnd=false;
+  const base=calMonthKey(calStart||todayStr||new Date().toISOString().slice(0,10));
+  calMonthA=base;calMonthB=calMonthKey(calEnd||base);
+  if(calMonthB<calMonthA)calMonthB=calMonthA;
+  rdropDate();
+}
+function calNav(side,delta){if(side==='a')calMonthA=calShiftMonth(calMonthA,delta);else calMonthB=calShiftMonth(calMonthB,delta);rdropDate();}
+function calChoose(d){
+  if(!calStart||calNextEnd){calStart=d;calEnd=d;calNextEnd=false;}
+  else if(d<calStart){calEnd=calStart;calStart=d;calNextEnd=true;}
+  else{calEnd=d;calNextEnd=true;}
+  rdropDate();
+}
+function calToday(){
+  const d=todayStr||new Date().toISOString().slice(0,10);
+  calStart=d;calEnd=d;calMonthA=calMonthB=calMonthKey(d);calNextEnd=false;rdropDate();
+}
+function calCancel(){closeDr('__date');}
+function calApply(){
+  selD.clear();selWeeks.clear();
+  if(calStart){
+    const lo=calStart,hi=calEnd||lo;
+    const matched=(sOpts._dates||[]).filter(d=>d>=lo&&d<=hi);
+    if(lo===hi)selD.add(lo);
+    else matched.forEach(d=>selD.add(d));
+  }
+  updDateChip();updWeekChip();rdropWeek();closeDr('__date');applyAll();
+}
+function calDrawMonth(month,side){
+  const parts=month.split('-').map(Number),year=parts[0],m=parts[1]-1;
+  const first=new Date(Date.UTC(year,m,1));
+  const offset=first.getUTCDay();
+  const count=new Date(Date.UTC(year,m+1,0)).getUTCDate();
+  const title=first.toLocaleDateString('en-US',{month:'short',year:'numeric',timeZone:'UTC'}).toUpperCase();
+  let html='<section class="cal-month"><div class="cal-month-head"><span>'+ (side==='a'?'Start Date':'End Date') +'</span></div>'+
+    '<div class="cal-nav"><button aria-label="Previous month" onclick="calNav(\''+side+'\',-1)">‹</button><strong>'+title+'</strong><button aria-label="Next month" onclick="calNav(\''+side+'\',1)">›</button></div>'+
+    '<div class="cal-weekdays">'+['S','M','T','W','T','F','S'].map(x=>'<span>'+x+'</span>').join('')+'</div><div class="cal-days">';
+  for(let n=0;n<offset;n++)html+='<span></span>';
+  for(let n=1;n<=count;n++){
+    const day=month+'-'+String(n).padStart(2,'0');
+    const picked=day===calStart||day===calEnd,inside=calStart&&calEnd&&day>calStart&&day<calEnd;
+    html+='<button type="button" class="cal-day'+(picked?' selected':'')+(inside?' in-range':'')+(day===todayStr?' is-today':'')+'" aria-label="'+day+'" aria-pressed="'+(!!picked)+'" onclick="calChoose(\''+day+'\')">'+n+'</button>';
+  }
+  return html+'</div></section>';
+}
+function rdropDate(){
+  const el=document.getElementById('dl___date');if(!el)return;
+  if(!calMonthA){calInitialize();return;}
+  el.innerHTML=calDrawMonth(calMonthA,'a')+calDrawMonth(calMonthB,'b');
+}
 function tgWeek(w){if(selWeeks.has(w))selWeeks.delete(w);else selWeeks.add(w);if(selWeeks.size)selD.forEach(d=>{if(!selWeeks.has(getWeekLabel(d)))selD.delete(d);});updWeekChip();rdropWeek();rdropDate();applyAll();}
 function tgDate(d){if(selD.has(d))selD.delete(d);else selD.add(d);updDateChip();rdropDate();applyAll();}
 function clrWeeks(){selWeeks.clear();selD.clear();updWeekChip();updDateChip();rdropWeek();rdropDate();applyAll();}
 function clrDates(){selD.clear();updDateChip();rdropDate();applyAll();}
 function updWeekChip(){const fc=document.getElementById('fc___week');if(!fc)return;const cnt=selWeeks.size;fc.className='fchip'+(cnt?' has-sel':'');fc.innerHTML=`📅 Week${cnt?` <span class="chk-cnt">${cnt}</span>`:''} <span class="chk-arr">▾</span>`;}
 function updDateChip(){const fc=document.getElementById('fc___date');if(!fc)return;const cnt=selD.size;fc.className='fchip'+(cnt?' has-sel':'');fc.innerHTML=`📆 Date${cnt?` <span class="chk-cnt">${cnt}</span>`:''} <span class="chk-arr">▾</span>`;}
-function tgDrop(k){if(openK&&openK!==k)closeDr(openK);const pid=k==='__week'?'dp___week':k==='__date'?'dp___date':k==='__time'?'dp___time':'dp_'+sid(k);const cid=k==='__week'?'fc___week':k==='__date'?'fc___date':k==='__time'?'fc___time':'fc_'+sid(k);const p=document.getElementById(pid),fc=document.getElementById(cid);if(!p)return;if(p.classList.contains('open'))closeDr(k);else{p.classList.add('open');fc.classList.add('open');openK=k;if(k==='__week')rdropWeek();else if(k==='__date')rdropDate();else rdrop(k);}}
+function tgDrop(k){if(openK&&openK!==k)closeDr(openK);const pid=k==='__week'?'dp___week':k==='__date'?'dp___date':k==='__time'?'dp___time':'dp_'+sid(k);const cid=k==='__week'?'fc___week':k==='__date'?'fc___date':k==='__time'?'fc___time':'fc_'+sid(k);const p=document.getElementById(pid),fc=document.getElementById(cid);if(!p)return;if(p.classList.contains('open'))closeDr(k);else{p.classList.add('open');fc.classList.add('open');openK=k;if(k==='__week')rdropWeek();else if(k==='__date')calInitialize();else rdrop(k);}}
 function closeDr(k){const pid=k==='__week'?'dp___week':k==='__date'?'dp___date':k==='__time'?'dp___time':'dp_'+sid(k);const cid=k==='__week'?'fc___week':k==='__date'?'fc___date':k==='__time'?'fc___time':'fc_'+sid(k);const p=document.getElementById(pid),fc=document.getElementById(cid);if(p)p.classList.remove('open');if(fc)fc.classList.remove('open');if(openK===k)openK=null;}
 function closeAll(){if(openK)closeDr(openK);}
 function rdrop(k){const listEl=document.getElementById('dl_'+sid(k));if(!listEl)return;const q=(document.getElementById('ds_'+sid(k))||{}).value||'';const opts=sOpts[k]||[],vis=q?opts.filter(v=>v.toLowerCase().includes(q.toLowerCase())):opts;const ss=sel[k]||new Set(),cm=cntFor(k);listEl.innerHTML=vis.map(v=>{const on=ss.has(v);return`<div class="dp-item${on?' on':''}" onclick="tgVal('${k}','${esc(v)}');event.stopPropagation()"><div class="dp-cb">${on?'✓':''}</div><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(v)}</span><span class="dp-cnt">${cm[v]||0}</span></div>`;}).join('')||'<div style="padding:8px;font-size:.62rem;color:var(--muted)">No results</div>';}
