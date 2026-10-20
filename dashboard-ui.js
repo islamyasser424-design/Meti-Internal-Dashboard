@@ -116,6 +116,7 @@ function analysisAggregate(rows,filters){
  return {selected,points,shifts:[...shifts].sort((a,b)=>b[1]-a[1]),lane:mi<0?null:selected.filter(lane).length,undated:selected.length-[...dates.values()].reduce((a,b)=>a+b,0)};
 }
 const slicerQueries={};
+const slicerDropdownOpen={};
 function createListSlicers(){
  const host=document.createElement('div');host.className='an-list-slicers';
  [['Shift','Shift'],['Floor',hdrs.some(h=>h.trim().toLowerCase()==='floor')?'Floor':'Unit'],['QTC','Qtc Name'],['Email','Yubikey Email']].forEach(([label,key])=>{
@@ -126,7 +127,12 @@ function createListSlicers(){
  const search=document.createElement('input');search.type='search';search.placeholder='Search '+label+'…';search.setAttribute('aria-label','Search '+label);search.value=slicerQueries[key]||'';panel.appendChild(search);
  const list=document.createElement('div');list.className='an-slicer-options';list.setAttribute('role','group');list.setAttribute('aria-label',label+' filter options');panel.appendChild(list);
  function draw(){list.replaceChildren();const q=search.value.trim().toLowerCase();const visible=values.filter(v=>v.toLowerCase().includes(q));visible.forEach(value=>{const row=document.createElement('label');const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=!!sel[key]?.has(value);const text=document.createElement('span');text.textContent=value;row.append(checkbox,text);checkbox.onchange=()=>{clearChartSelection();if(!sel[key])sel[key]=new Set();if(key==='Shift')setShiftsUI(null);checkbox.checked?sel[key].add(value):sel[key].delete(value);applyAll();refreshOpenSlicers();};list.appendChild(row);});if(!visible.length){const empty=document.createElement('p');empty.className='ux-note';empty.textContent=ci<0?'Column unavailable':'No matching values';list.appendChild(empty);}}
- search.oninput=()=>{slicerQueries[key]=search.value;draw();};draw();host.appendChild(panel);
+ search.oninput=()=>{slicerQueries[key]=search.value;draw();};draw();
+ const dropdown=document.createElement('details');dropdown.className='an-slicer-dropdown';dropdown.dataset.slicerKey=key;dropdown.open=!!slicerDropdownOpen[key];
+ const summary=document.createElement('summary');summary.setAttribute('aria-label',label+' filter');const selected=[...(sel[key]||[])];summary.textContent=selected.length===0?label+' · All':label+' · '+(selected.length===1?selected[0]:selected.length+' selected');summary.title=selected.length?selected.join(', '):'All '+label;dropdown.append(summary,panel);
+ dropdown.addEventListener('toggle',()=>{if(!dropdown.isConnected)return;slicerDropdownOpen[key]=dropdown.open;if(dropdown.open){document.querySelectorAll('.an-slicer-dropdown[open]').forEach(other=>{if(other!==dropdown){other.open=false;slicerDropdownOpen[other.dataset.slicerKey]=false;}});}});
+ dropdown.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();dropdown.open=false;slicerDropdownOpen[key]=false;summary.focus();}});
+ host.appendChild(dropdown);
  });return host;
 }
 function refreshOpenSlicers(){if(filterDrawer.open)renderDrawerAnalysis();}
@@ -192,6 +198,7 @@ const globalFilters=$('uxDrawerGlobal');['.shift-banner','#fstrip','.pills-row',
 filterButton.onclick=()=>{closeNav();renderDrawerAnalysis();if(!filterDrawer.open)filterDrawer.showModal();};$('uxCloseFilters').onclick=()=>filterDrawer.close();filterDrawer.addEventListener('click',e=>{if(e.target===filterDrawer){const r=filterDrawer.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)filterDrawer.close();}});filterDrawer.addEventListener('close',()=>filterButton.focus());
 function renderDrawerAnalysis(){const box=$('uxDrawerAnalysis');box.replaceChildren(createListSlicers());}
 
+document.addEventListener('click',e=>{if(!e.target.closest('.an-slicer-dropdown'))document.querySelectorAll('.an-slicer-dropdown[open]').forEach(el=>{el.open=false;slicerDropdownOpen[el.dataset.slicerKey]=false;});});
 const oldRender=renderAllSections;renderAllSections=function(){oldRender.apply(this,arguments);renderOverview();renderAnalysis();};
 renderOverview();
 })();
