@@ -116,6 +116,8 @@ window.openGuideModal = openGuideModal;
 window.copyCurrentSummaryToClipboard = copyCurrentSummaryToClipboard;
 window.renderQueuesAnalysis = renderQueuesAnalysis;
 window.renderQtcFloorPerformance = renderQtcFloorPerformance;
+window.floorAggregateData = floorAggregateData;
+window.exportFloorPerformanceCSV = exportFloorPerformanceCSV;
 window.renderPerformance = renderPerformance;
 window.renderDailyReport = renderDailyReport;
 window.renderOverview = renderOverview;
@@ -134,6 +136,20 @@ const QUEUE_HEADER_EXPLANATIONS = {
  'uniqueLabelers': { title: 'Unique Labelers', desc: 'عدد أفراد اللابلرز الفريدين (محسوب بالرقم القومي 14 رقم بالضبط)', note: 'اضغط للترتيب' },
  'avgSubmit': { title: 'Avg Submit / Labeler', desc: 'معدل الإنتاجية المتوسط = Total Submit ÷ Unique Labelers', note: 'اضغط للترتيب' },
  'uniqueQtc': { title: 'Total Unique QTC', desc: 'عدد مسؤولي الجودة (QTCs) الفريدين المشرفين على هذا الكيو', note: 'اضغط للترتيب' }
+};
+
+const FLOOR_HEADER_EXPLANATIONS = {
+ 'floor': { title: 'Floor / Unit / Room', desc: 'اسم الدور أو الغرفة أو الوحدة المكانية (مثل 4th Floor, NC Room 102)', note: 'اضغط للترتيب أبجدياً' },
+ 'shifts': { title: 'Active Shifts', desc: 'الشيفتات التي سجلت إنتاجية في هذا الدور (Morning, Night, Over Night)' },
+ 'uniqueQtcs': { title: 'Supervising QTCs', desc: 'عدد مسؤولي الجودة المشرفين على هذا الدور - حوّم لرؤية قائمة الأسماء', note: 'اضغط للترتيب' },
+ 'lidarFP': { title: 'Lidar FP', desc: 'إجمالي تاسكات ليدار فيرست باس المسلمة في هذا الدور', note: 'اضغط للترتيب' },
+ 'lidarQA': { title: 'Lidar QA', desc: 'إجمالي تاسكات ليدار مراجعة الجودة في هذا الدور', note: 'اضغط للترتيب' },
+ 'laneFP': { title: 'Lane Line FP', desc: 'إجمالي تاسكات لين لاين فيرست باس في هذا الدور', note: 'اضغط للترتيب' },
+ 'laneQA': { title: 'Lane Line QA', desc: 'إجمالي تاسكات لين لاين مراجعة الجودة في هذا الدور', note: 'اضغط للترتيب' },
+ 'totalSubmit': { title: 'Total Submit', desc: 'إجمالي عدد التاسكات المسلمة من جميع العاملين في هذا الدور', note: 'اضغط للترتيب' },
+ 'uniqueLabelers': { title: 'Unique Labelers', desc: 'عدد أفراد اللابلرز الفريدين في هذا الدور (محسوب بالرقم القومي 14 رقم)', note: 'اضغط للترتيب' },
+ 'avgSubmit': { title: 'Avg Submit / Labeler', desc: 'معدل الإنتاجية المتوسط للدور = Total Submit ÷ Unique Labelers', note: 'اضغط للترتيب' },
+ 'sharePct': { title: 'Floor Share %', desc: 'نسبة مساهمة هذا الدور من إجمالي تسليمات الشركة المعروضة', note: 'اضغط للترتيب' }
 };
 
 const QF_HEADER_EXPLANATIONS = {
@@ -285,6 +301,7 @@ window.addEventListener('keydown', e => {
 const queuesFilters={query:'',shift:'',floor:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0,pageSize:25};
 const queuesChartFilters={queue:'all',stage:'all',from:'',to:'',day:''};
 const qtcFloorFilters={query:'',qtc:'',floor:'',shift:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0,pageSize:25};
+const floorPerformanceFilters={sortCol:'totalSubmit',sortAsc:false,page:0,pageSize:15};
 let view='both';let target=0;try{target=Math.max(0,Number(localStorage.getItem('meeg_personal_target'))||0);}catch(e){}
 const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 const root=document.createElement('div');root.id='uxDashboard';
@@ -299,7 +316,7 @@ const performance=document.createElement('section');performance.id='uxPerformanc
 const dailyPage=document.createElement('section');dailyPage.id='uxDaily';dailyPage.hidden=true;document.body.appendChild(dailyPage);
 const queuesPage=document.createElement('section');queuesPage.id='uxQueues';queuesPage.hidden=true;document.body.appendChild(queuesPage);
 const qtcFloorPage=document.createElement('section');qtcFloorPage.id='uxQtcFloor';qtcFloorPage.hidden=true;document.body.appendChild(qtcFloorPage);
-const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><b>◈</b> MEEG<span style="display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:7px">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="queues">☷ &nbsp; Queues Analysis</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="qtcfloor">🏢 &nbsp; Performance per QTC & Floor</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
+const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><div class="brand-logo-card"><img src="assets/meeg-logo.png" alt="MEEG - Micro Engineering Egypt" class="brand-img"></div><span class="brand-workspace-tag">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="queues">☷ &nbsp; Queues Analysis</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="qtcfloor">🏢 &nbsp; Performance per QTC & Floor</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
 document.body.appendChild(aside);
 const menu=document.createElement('button');menu.className='btn ux-mobile';menu.textContent='☰ Menu';menu.setAttribute('aria-expanded','false');menu.setAttribute('aria-label','Open navigation');document.body.insertBefore(menu,root);
 const backdrop=document.createElement('button');backdrop.className='ux-backdrop';backdrop.setAttribute('aria-label','Close navigation');document.body.appendChild(backdrop);
@@ -329,6 +346,7 @@ function resetAllFilters(){
  Object.assign(queuesChartFilters,{queue:'all',stage:'all',from:'',to:'',day:''});
  Object.assign(perfFilters,{from:'',to:'',day:'',week:'',category:'',query:'',person:'',page:0});
  Object.assign(qtcFloorFilters,{query:'',qtc:'',floor:'',shift:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0});
+ Object.assign(floorPerformanceFilters,{sortCol:'totalSubmit',sortAsc:false,page:0});
  if(typeof setShiftsUI==='function')setShiftsUI({});
  const idInput=$('idFilterInput');if(idInput)idInput.value='';
  idFilter='';timeFrom='';timeTo='';timePreset='';activeLoc='__all__';
@@ -1909,33 +1927,151 @@ function exportQtcFloorCSV(items){
  downloadBlob(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),'MEEG_QTC_Floor_Performance_'+cairoToday()+'.csv');
 }
 
+function floorAggregateData(rows){
+ const idx=name=>hdrs.findIndex(h=>h.trim().toLowerCase()===name.toLowerCase());
+ const qi=idx('qtc name'), fi=hdrs.findIndex(h=>['floor','unit'].includes(h.trim().toLowerCase()));
+ const si=idx('shift'), mi=idx('modality'), pi=idx('pass');
+ const ni=idx('national id'), li=idx('labeler name');
+
+ const groups=new Map();
+ rows.forEach(r=>{
+  const floor=fi>=0?(String(r[fi]||'').trim()||'Unknown Floor'):'Unknown Floor';
+  const qtc=qi>=0?(String(r[qi]||'').normalize('NFC').trim().replace(/\s+/gu,' ')||'Unknown QTC'):'Unknown QTC';
+  if(!groups.has(floor)){
+   groups.set(floor,{
+    floor,
+    shifts:new Set(),
+    qtcs:new Set(),
+    lidarFP:0,
+    lidarQA:0,
+    laneFP:0,
+    laneQA:0,
+    totalSubmit:0,
+    labelerSet:new Set()
+   });
+  }
+  const g=groups.get(floor);
+  g.totalSubmit++;
+  if(si>=0){
+   const s=String(r[si]||'').trim();
+   if(s)g.shifts.add(s);
+  }
+  if(qtc&&qtc!=='Unknown QTC')g.qtcs.add(qtc);
+
+  let lid='';
+  if(ni>=0){
+   const rawNi=String(r[ni]??'').trim()
+    .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632))
+    .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776))
+    .replace(/\.0+$/,'').replace(/[\s-]/g,'');
+   if(/^\d{14}$/.test(rawNi))lid=rawNi;
+  }
+  if(!lid&&li>=0){
+   const name=String(r[li]??'').trim().toLowerCase();
+   if(name)lid='name:'+name;
+  }
+  if(lid)g.labelerSet.add(lid);
+
+  const mod=mi<0?'':String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'');
+  const pass=pi<0?'':String(r[pi]||'').trim().toUpperCase();
+  const prefix=mod==='lidar'?'lidar':(mod==='laneline'||mod==='lane')?'lane':'';
+  if(prefix&&(pass==='FP'||pass==='QA')){
+   const cat=prefix+pass;
+   if(cat==='lidarFP')g.lidarFP++;
+   else if(cat==='lidarQA')g.lidarQA++;
+   else if(cat==='laneFP')g.laneFP++;
+   else if(cat==='laneQA')g.laneQA++;
+  }
+ });
+
+ const overallTotal=rows.length||1;
+
+ return [...groups.values()].map(g=>{
+  const uniqueLabelers=g.labelerSet.size;
+  const avgSubmit=uniqueLabelers>0?(g.totalSubmit/uniqueLabelers):0;
+  const sharePct=((g.totalSubmit/overallTotal)*100).toFixed(1);
+  return {
+   ...g,
+   shifts:[...g.shifts].sort(),
+   qtcs:[...g.qtcs].sort(),
+   uniqueQtcs:g.qtcs.size,
+   uniqueLabelers,
+   avgSubmit,
+   avgSubmitStr:avgSubmit>0?avgSubmit.toFixed(1):'—',
+   sharePct:Number(sharePct)||0,
+   sharePctStr:sharePct+'%'
+  };
+ });
+}
+
+function exportFloorPerformanceCSV(groups){
+ if(!groups||!groups.length){showToast('No floor records to export.');return;}
+ const headers=['Floor / Unit / Room','Active Shifts','Active QTC Count','Supervising QTCs','Lidar FP','Lidar QA','Lane Line FP','Lane Line QA','Total Submit','Unique Labelers','Avg Submit / Labeler','Floor Share %'];
+ const rows=groups.map(g=>[
+  g.floor,
+  g.shifts.join('; '),
+  g.uniqueQtcs,
+  g.qtcs.join('; '),
+  g.lidarFP,
+  g.lidarQA,
+  g.laneFP,
+  g.laneQA,
+  g.totalSubmit,
+  g.uniqueLabelers,
+  g.avgSubmitStr,
+  g.sharePctStr
+ ]);
+ const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replace(/"/g,'""')+'"';
+ const csv=[headers,...rows].map(r=>r.map(cell).join(',')).join('\r\n');
+ downloadBlob(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),'MEEG_floor_performance_'+cairoToday()+'.csv');
+ showToast('✓ Floor performance CSV exported successfully!');
+}
+
 function renderQtcFloorPerformance(){
  const page=$('uxQtcFloor');
  if(!page||page.hidden)return;
 
- const rows=rowsInView();
- const allGroups=qtcFloorAggregateData(rows);
+ const baseRows=rowsInView();
 
- const distinctQtcs=[...new Set(allGroups.map(g=>g.qtc))].sort();
- const distinctFloors=[...new Set(allGroups.map(g=>g.floor))].sort();
- const distinctShifts=[...new Set(allGroups.flatMap(g=>g.shifts))].sort();
+ const idx=name=>hdrs.findIndex(h=>h.trim().toLowerCase()===name.toLowerCase());
+ const qi=idx('qtc name');
+ const fi=hdrs.findIndex(h=>['floor','unit'].includes(h.trim().toLowerCase()));
+ const si=idx('shift');
+ const mi=idx('modality');
+ const pi=idx('pass');
 
+ // Extract distinct options across baseRows for dropdown population
+ const distinctQtcs=[...new Set(baseRows.map(r=>qi>=0?String(r[qi]||'').normalize('NFC').trim().replace(/\s+/gu,' '):'').filter(Boolean))].sort();
+ const distinctFloors=[...new Set(baseRows.map(r=>fi>=0?String(r[fi]||'').trim():'').filter(Boolean))].sort();
+ const distinctShifts=[...new Set(baseRows.map(r=>si>=0?String(r[si]||'').trim():'').filter(Boolean))].sort();
+
+ // Filter baseRows by all page filters (synchronously applies to whole page!)
  const q=qtcFloorFilters.query.toLowerCase().trim();
- const filtered=allGroups.filter(g=>{
-  if(q&&![g.qtc,g.floor,...g.shifts].some(v=>v.toLowerCase().includes(q)))return false;
-  if(qtcFloorFilters.qtc&&g.qtc!==qtcFloorFilters.qtc)return false;
-  if(qtcFloorFilters.floor&&g.floor!==qtcFloorFilters.floor)return false;
-  if(qtcFloorFilters.shift&&!g.shifts.includes(qtcFloorFilters.shift))return false;
-  if(qtcFloorFilters.category){
-   if(qtcFloorFilters.category==='lidarFP'&&g.lidarFP<=0)return false;
-   if(qtcFloorFilters.category==='lidarQA'&&g.lidarQA<=0)return false;
-   if(qtcFloorFilters.category==='laneFP'&&g.laneFP<=0)return false;
-   if(qtcFloorFilters.category==='laneQA'&&g.laneQA<=0)return false;
+ const filteredRows=baseRows.filter(r=>{
+  const qtc=qi>=0?String(r[qi]||'').normalize('NFC').trim().replace(/\s+/gu,' '):'';
+  const floor=fi>=0?String(r[fi]||'').trim():'';
+  const shift=si>=0?String(r[si]||'').trim():'';
+  const mod=mi<0?'':String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'');
+  const pass=pi<0?'':String(r[pi]||'').trim().toUpperCase();
+  const cat=(mod==='lidar'?'lidar':(mod==='laneline'||mod==='lane')?'lane':'')+pass;
+
+  if(qtcFloorFilters.qtc&&qtc!==qtcFloorFilters.qtc)return false;
+  if(qtcFloorFilters.floor&&floor!==qtcFloorFilters.floor)return false;
+  if(qtcFloorFilters.shift&&shift!==qtcFloorFilters.shift)return false;
+  if(qtcFloorFilters.category&&cat!==qtcFloorFilters.category)return false;
+
+  if(q){
+   const matchQ=qtc.toLowerCase().includes(q);
+   const matchF=floor.toLowerCase().includes(q);
+   const matchS=shift.toLowerCase().includes(q);
+   if(!matchQ&&!matchF&&!matchS)return false;
   }
   return true;
  });
 
- filtered.sort((a,b)=>{
+ // Table 1: QTC & Floor aggregation from filteredRows
+ const allQTCFloorGroups=qtcFloorAggregateData(filteredRows);
+ allQTCFloorGroups.sort((a,b)=>{
   const col=qtcFloorFilters.sortCol;
   let va=a[col],vb=b[col];
   if(typeof va==='string')return qtcFloorFilters.sortAsc?va.localeCompare(vb):vb.localeCompare(va);
@@ -1943,16 +2079,38 @@ function renderQtcFloorPerformance(){
   return qtcFloorFilters.sortAsc?va-vb:vb-va;
  });
 
- const pageSize=qtcFloorFilters.pageSize||25;
- const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
- qtcFloorFilters.page=Math.min(qtcFloorFilters.page,totalPages-1);
- const visible=filtered.slice(qtcFloorFilters.page*pageSize,(qtcFloorFilters.page+1)*pageSize);
+ const qfPageSize=qtcFloorFilters.pageSize||25;
+ const qfTotalPages=Math.max(1,Math.ceil(allQTCFloorGroups.length/qfPageSize));
+ qtcFloorFilters.page=Math.min(qtcFloorFilters.page,qfTotalPages-1);
+ const qfVisible=allQTCFloorGroups.slice(qtcFloorFilters.page*qfPageSize,(qtcFloorFilters.page+1)*qfPageSize);
 
- const totalSubmissions=filtered.reduce((s,g)=>s+g.totalSubmit,0);
- const totalUniqueLabelers=new Set(filtered.flatMap(g=>[...g.labelerSet])).size;
+ // Table 2: Floor Performance aggregation from filteredRows
+ const allFloorGroups=floorAggregateData(filteredRows);
+ allFloorGroups.sort((a,b)=>{
+  const col=floorPerformanceFilters.sortCol;
+  let va=a[col],vb=b[col];
+  if(typeof va==='string')return floorPerformanceFilters.sortAsc?va.localeCompare(vb):vb.localeCompare(va);
+  va=Number(va)||0;vb=Number(vb)||0;
+  return floorPerformanceFilters.sortAsc?va-vb:vb-va;
+ });
+
+ const floorPageSize=floorPerformanceFilters.pageSize||15;
+ const floorTotalPages=Math.max(1,Math.ceil(allFloorGroups.length/floorPageSize));
+ floorPerformanceFilters.page=Math.min(floorPerformanceFilters.page,floorTotalPages-1);
+ const floorVisible=allFloorGroups.slice(floorPerformanceFilters.page*floorPageSize,(floorPerformanceFilters.page+1)*floorPageSize);
+
+ // KPI metrics derived from filteredRows
+ const totalSubmissions=filteredRows.length;
+ const totalUniqueLabelers=labelerSubmissionMetrics(filteredRows).unique??0;
  const overallAvg=totalUniqueLabelers>0?(totalSubmissions/totalUniqueLabelers).toFixed(1):'0';
- const totalUniqueQtcs=new Set(filtered.map(g=>g.qtc)).size;
- const totalUniqueFloors=new Set(filtered.map(g=>g.floor)).size;
+ const totalUniqueQtcs=new Set(filteredRows.map(r=>qi>=0?String(r[qi]||'').normalize('NFC').trim().replace(/\s+/gu,' '):'').filter(Boolean)).size;
+ const totalUniqueFloors=new Set(filteredRows.map(r=>fi>=0?String(r[fi]||'').trim():'').filter(Boolean)).size;
+
+ const qfSortArrow=colKey=>qtcFloorFilters.sortCol===colKey?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕';
+ const qfSortClass=colKey=>qtcFloorFilters.sortCol===colKey?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'';
+
+ const floorSortArrow=colKey=>floorPerformanceFilters.sortCol===colKey?(floorPerformanceFilters.sortAsc?' ▲':' ▼'):' ↕';
+ const floorSortClass=colKey=>floorPerformanceFilters.sortCol===colKey?(floorPerformanceFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'';
 
  page.innerHTML='<div class="ux-overview">'
   +'<div class="ux-heading">'
@@ -1972,32 +2130,33 @@ function renderQtcFloorPerformance(){
   +'</div>'
   +'<div class="queues-controls">'
    +'<label>Search QTC / Floor / Shift:<input type="search" id="qfSearch" placeholder="Filter by name..." value="'+esc(qtcFloorFilters.query)+'"></label>'
-   +'<label>Filter by QTC:<select id="qfQtc"><option value="">All QTCs</option>'+distinctQtcs.map(q=>'<option value="'+esc(q)+'" '+(qtcFloorFilters.qtc===q?'selected':'')+'>'+esc(q)+'</option>').join('')+'</select></label>'
-   +'<label>Filter by Floor:<select id="qfFloor"><option value="">All Floors</option>'+distinctFloors.map(f=>'<option value="'+esc(f)+'" '+(qtcFloorFilters.floor===f?'selected':'')+'>'+esc(f)+'</option>').join('')+'</select></label>'
-   +'<label>Filter by Shift:<select id="qfShift"><option value="">All Shifts</option>'+distinctShifts.map(s=>'<option value="'+esc(s)+'" '+(qtcFloorFilters.shift===s?'selected':'')+'>'+esc(s)+'</option>').join('')+'</select></label>'
+   +'<label>Filter by QTC:<select id="qfQtc"><option value="">All QTCs ('+distinctQtcs.length+')</option>'+distinctQtcs.map(q=>'<option value="'+esc(q)+'" '+(qtcFloorFilters.qtc===q?'selected':'')+'>'+esc(q)+'</option>').join('')+'</select></label>'
+   +'<label>Filter by Floor:<select id="qfFloor"><option value="">All Floors ('+distinctFloors.length+')</option>'+distinctFloors.map(f=>'<option value="'+esc(f)+'" '+(qtcFloorFilters.floor===f?'selected':'')+'>'+esc(f)+'</option>').join('')+'</select></label>'
+   +'<label>Filter by Shift:<select id="qfShift"><option value="">All Shifts ('+distinctShifts.length+')</option>'+distinctShifts.map(s=>'<option value="'+esc(s)+'" '+(qtcFloorFilters.shift===s?'selected':'')+'>'+esc(s)+'</option>').join('')+'</select></label>'
    +'<label>Stage:<select id="qfCategory"><option value="">All Stages</option><option value="lidarFP" '+(qtcFloorFilters.category==='lidarFP'?'selected':'')+'>Lidar FP</option><option value="lidarQA" '+(qtcFloorFilters.category==='lidarQA'?'selected':'')+'>Lidar QA</option><option value="laneFP" '+(qtcFloorFilters.category==='laneFP'?'selected':'')+'>Lane Line FP</option><option value="laneQA" '+(qtcFloorFilters.category==='laneQA'?'selected':'')+'>Lane Line QA</option></select></label>'
    +'<div style="display:flex;gap:8px;align-self:flex-end">'
     +'<button class="btn" id="qfReset">Reset</button>'
-    +'<button class="btn btn-c" id="qfExportCSV">↓ Export CSV</button>'
+    +'<button class="btn btn-c" id="qfExportCSV">↓ Export QTC & Floor CSV</button>'
    +'</div>'
   +'</div>'
   +'<section class="ux-panel">'
+   +'<div class="ux-heading" style="margin-bottom:12px"><div><h3>QTC & Floor Pairs ('+allQTCFloorGroups.length.toLocaleString()+' pairs)</h3><p>Click any column header with ↕ to sort</p></div><span class="ux-note">Showing '+(qfVisible.length?(qtcFloorFilters.page*qfPageSize+1):0)+' – '+Math.min((qtcFloorFilters.page+1)*qfPageSize,allQTCFloorGroups.length)+' of '+allQTCFloorGroups.length+' pairs</span></div>'
    +'<div class="perf-table">'
     +'<table>'
      +'<thead><tr>'
-      +'<th data-qf-sort="qtc" class="'+(qtcFloorFilters.sortCol==='qtc'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'">QTC Name'+(qtcFloorFilters.sortCol==='qtc'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
-      +'<th data-qf-sort="floor" class="'+(qtcFloorFilters.sortCol==='floor'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'">Floor / Unit'+(qtcFloorFilters.sortCol==='floor'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
+      +'<th data-qf-sort="qtc" class="'+qfSortClass('qtc')+'">QTC Name'+qfSortArrow('qtc')+'</th>'
+      +'<th data-qf-sort="floor" class="'+qfSortClass('floor')+'">Floor / Unit'+qfSortArrow('floor')+'</th>'
       +'<th data-qf-tip="shifts">Shifts</th>'
-      +'<th data-qf-sort="lidarFP" class="'+(qtcFloorFilters.sortCol==='lidarFP'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'" style="color:#7258f5">Lidar FP'+(qtcFloorFilters.sortCol==='lidarFP'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
-      +'<th data-qf-sort="lidarQA" class="'+(qtcFloorFilters.sortCol==='lidarQA'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'" style="color:#15b8a6">Lidar QA'+(qtcFloorFilters.sortCol==='lidarQA'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
-      +'<th data-qf-sort="laneFP" class="'+(qtcFloorFilters.sortCol==='laneFP'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'" style="color:#ed9a35">Lane Line FP'+(qtcFloorFilters.sortCol==='laneFP'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
-      +'<th data-qf-sort="laneQA" class="'+(qtcFloorFilters.sortCol==='laneQA'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'" style="color:#e9689e">Lane Line QA'+(qtcFloorFilters.sortCol==='laneQA'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
-      +'<th data-qf-sort="totalSubmit" class="'+(qtcFloorFilters.sortCol==='totalSubmit'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'">Total Submit'+(qtcFloorFilters.sortCol==='totalSubmit'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
-      +'<th data-qf-sort="uniqueLabelers" class="'+(qtcFloorFilters.sortCol==='uniqueLabelers'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'">Unique Labelers'+(qtcFloorFilters.sortCol==='uniqueLabelers'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
-      +'<th data-qf-sort="avgSubmit" class="'+(qtcFloorFilters.sortCol==='avgSubmit'?(qtcFloorFilters.sortAsc?' th-sorted-asc':' th-sorted-desc'):'')+'">Avg Submit'+(qtcFloorFilters.sortCol==='avgSubmit'?(qtcFloorFilters.sortAsc?' ▲':' ▼'):' ↕')+'</th>'
+      +'<th data-qf-sort="lidarFP" class="'+qfSortClass('lidarFP')+'" style="color:#7258f5">Lidar FP'+qfSortArrow('lidarFP')+'</th>'
+      +'<th data-qf-sort="lidarQA" class="'+qfSortClass('lidarQA')+'" style="color:#15b8a6">Lidar QA'+qfSortArrow('lidarQA')+'</th>'
+      +'<th data-qf-sort="laneFP" class="'+qfSortClass('laneFP')+'" style="color:#ed9a35">Lane Line FP'+qfSortArrow('laneFP')+'</th>'
+      +'<th data-qf-sort="laneQA" class="'+qfSortClass('laneQA')+'" style="color:#e9689e">Lane Line QA'+qfSortArrow('laneQA')+'</th>'
+      +'<th data-qf-sort="totalSubmit" class="'+qfSortClass('totalSubmit')+'">Total Submit'+qfSortArrow('totalSubmit')+'</th>'
+      +'<th data-qf-sort="uniqueLabelers" class="'+qfSortClass('uniqueLabelers')+'">Unique Labelers'+qfSortArrow('uniqueLabelers')+'</th>'
+      +'<th data-qf-sort="avgSubmit" class="'+qfSortClass('avgSubmit')+'">Avg Submit'+qfSortArrow('avgSubmit')+'</th>'
      +'</tr></thead>'
      +'<tbody>'
-      +visible.map(g=>'<tr>'
+      +qfVisible.map(g=>'<tr>'
        +'<td><b style="color:var(--accent)">'+esc(g.qtc)+'</b></td>'
        +'<td><span class="q-badge q-floor">'+esc(g.floor)+'</span></td>'
        +'<td>'+(g.shifts.length?g.shifts.map(s=>'<span class="q-badge q-shift">'+esc(s)+'</span>').join(''):'—')+'</td>'
@@ -2011,65 +2170,157 @@ function renderQtcFloorPerformance(){
       +'</tr>').join('')
      +'</tbody>'
     +'</table>'
-    +(!filtered.length?'<div class="ux-empty">No records match your filters.</div>':'')
+    +(!allQTCFloorGroups.length?'<div class="ux-empty">No records match your filters.</div>':'')
    +'</div>'
    +'<div class="perf-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">'
     +'<button class="btn" id="qfPrev" '+(qtcFloorFilters.page===0?'disabled':'')+'>Previous</button>'
-    +'<span class="ux-note">Page '+(qtcFloorFilters.page+1)+' of '+totalPages+' ('+filtered.length.toLocaleString()+' pairs)</span>'
-    +'<button class="btn" id="qfNext" '+(qtcFloorFilters.page>=totalPages-1?'disabled':'')+'>Next</button>'
+    +'<span class="ux-note">Page '+(qtcFloorFilters.page+1)+' of '+qfTotalPages+' ('+allQTCFloorGroups.length.toLocaleString()+' pairs)</span>'
+    +'<button class="btn" id="qfNext" '+(qtcFloorFilters.page>=qfTotalPages-1?'disabled':'')+'>Next</button>'
+   +'</div>'
+  +'</section>'
+
+  // TABLE 2: PERFORMANCE PER FLOOR / UNIT / ROOM
+  +'<section class="ux-panel floor-performance-section">'
+   +'<div class="floor-panel-heading">'
+    +'<div class="floor-panel-title">'
+     +'<div class="ux-eyebrow" style="color:var(--accent)">Area & Room Analysis</div>'
+     +'<h3>🏢 Performance per Floor / Unit / Room ('+allFloorGroups.length.toLocaleString()+' rooms / floors)</h3>'
+     +'<p>Consolidated output, active shifts, supervising QTCs, and throughput aggregated by Floor / Unit / Room.</p>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;align-items:center">'
+     +'<span class="ux-note">Showing '+(floorVisible.length?(floorPerformanceFilters.page*floorPageSize+1):0)+' – '+Math.min((floorPerformanceFilters.page+1)*floorPageSize,allFloorGroups.length)+' of '+allFloorGroups.length+' floors</span>'
+     +'<button class="btn btn-c" id="floorExportCSV">↓ Export Floors CSV</button>'
+    +'</div>'
+   +'</div>'
+   +'<div class="perf-table">'
+    +'<table>'
+     +'<thead><tr>'
+      +'<th data-floor-sort="floor" class="'+floorSortClass('floor')+'">Floor / Unit / Room'+floorSortArrow('floor')+'</th>'
+      +'<th data-floor-tip="shifts">Active Shifts</th>'
+      +'<th data-floor-sort="uniqueQtcs" class="'+floorSortClass('uniqueQtcs')+'">Active QTCs'+floorSortArrow('uniqueQtcs')+'</th>'
+      +'<th data-floor-sort="lidarFP" class="'+floorSortClass('lidarFP')+'" style="color:#7258f5">Lidar FP'+floorSortArrow('lidarFP')+'</th>'
+      +'<th data-floor-sort="lidarQA" class="'+floorSortClass('lidarQA')+'" style="color:#15b8a6">Lidar QA'+floorSortArrow('lidarQA')+'</th>'
+      +'<th data-floor-sort="laneFP" class="'+floorSortClass('laneFP')+'" style="color:#ed9a35">Lane Line FP'+floorSortArrow('laneFP')+'</th>'
+      +'<th data-floor-sort="laneQA" class="'+floorSortClass('laneQA')+'" style="color:#e9689e">Lane Line QA'+floorSortArrow('laneQA')+'</th>'
+      +'<th data-floor-sort="totalSubmit" class="'+floorSortClass('totalSubmit')+'">Total Submit'+floorSortArrow('totalSubmit')+'</th>'
+      +'<th data-floor-sort="uniqueLabelers" class="'+floorSortClass('uniqueLabelers')+'">Unique Labelers'+floorSortArrow('uniqueLabelers')+'</th>'
+      +'<th data-floor-sort="avgSubmit" class="'+floorSortClass('avgSubmit')+'">Avg Submit'+floorSortArrow('avgSubmit')+'</th>'
+      +'<th data-floor-sort="sharePct" class="'+floorSortClass('sharePct')+'">Floor Share %'+floorSortArrow('sharePct')+'</th>'
+     +'</tr></thead>'
+     +'<tbody>'
+      +floorVisible.map(g=>'<tr>'
+       +'<td><b style="color:var(--accent);display:inline-flex;align-items:center;gap:6px"><span class="q-badge q-floor">'+esc(g.floor)+'</span></b></td>'
+       +'<td>'+(g.shifts.length?g.shifts.map(s=>'<span class="q-badge q-shift">'+esc(s)+'</span>').join(''):'—')+'</td>'
+       +'<td><span class="q-badge q-qtc" data-qtcs="'+esc(g.qtcs.join(', '))+'">'+g.uniqueQtcs+' QTC'+(g.uniqueQtcs===1?'':'s')+'</span></td>'
+       +'<td><b class="q-val-lidar-fp">'+g.lidarFP.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lidar-qa">'+g.lidarQA.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lane-fp">'+g.laneFP.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lane-qa">'+g.laneQA.toLocaleString()+'</b></td>'
+       +'<td><strong class="q-val-total">'+g.totalSubmit.toLocaleString()+'</strong></td>'
+       +'<td><b>'+g.uniqueLabelers.toLocaleString()+'</b></td>'
+       +'<td><span class="q-val-avg">'+g.avgSubmitStr+'</span></td>'
+       +'<td>'
+        +'<div class="floor-share-wrap">'
+         +'<div class="floor-share-bar">'
+          +'<div class="floor-share-fill" style="width:'+Math.min(100,Math.max(3,g.sharePct))+'%"></div>'
+         +'</div>'
+         +'<span class="floor-share-val">'+g.sharePctStr+'</span>'
+        +'</div>'
+       +'</td>'
+      +'</tr>').join('')
+     +'</tbody>'
+    +'</table>'
+    +(!allFloorGroups.length?'<div class="ux-empty">No floor data matches your current filters.</div>':'')
+   +'</div>'
+   +'<div class="perf-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">'
+    +'<button class="btn" id="floorPrev" '+(floorPerformanceFilters.page===0?'disabled':'')+'>Previous</button>'
+    +'<span class="ux-note">Page '+(floorPerformanceFilters.page+1)+' of '+floorTotalPages+' ('+allFloorGroups.length.toLocaleString()+' floors / rooms)</span>'
+    +'<button class="btn" id="floorNext" '+(floorPerformanceFilters.page>=floorTotalPages-1?'disabled':'')+'>Next</button>'
    +'</div>'
   +'</section>'
  +'</div>';
 
  bindHeaderControls(page,'qfloor');
 
- page.querySelectorAll('th[data-qf-sort], th[data-qf-tip]').forEach(th => {
-  const col = th.dataset.qfSort || th.dataset.qfTip;
-  const info = QF_HEADER_EXPLANATIONS[col];
-  if (info) {
-   MeegTooltip.attach(th, () => ({
-    title: info.title,
-    badge: th.dataset.qfSort ? 'Click to Sort' : 'Column Info',
-    desc: info.desc,
-    note: info.note
+ // Tooltips for Table 1
+ page.querySelectorAll('th[data-qf-sort], th[data-qf-tip]').forEach(th=>{
+  const col=th.dataset.qfSort||th.dataset.qfTip;
+  const info=QF_HEADER_EXPLANATIONS[col];
+  if(info){
+   MeegTooltip.attach(th,()=>({
+    title:info.title,
+    badge:th.dataset.qfSort?'Click to Sort':'Column Info',
+    desc:info.desc,
+    note:info.note
    }));
   }
  });
 
- page.querySelectorAll('.an-overall-item').forEach(item => {
-  const lbl = item.querySelector('.an-overall-lbl')?.textContent || '';
-  const val = item.querySelector('.an-overall-val')?.textContent || '';
-  const descMap = {
-   'TOTAL SUBMISSIONS': 'إجمالي عدد التاسكات المسلمة لجميع السجلات المطابقة للفلاتر',
-   'UNIQUE QTCS': 'عدد مسؤولي الجودة (QTCs) الفريدين في النتائج المعروضة',
-   'UNIQUE FLOORS': 'عدد الأدوار / الوحدات المكانية المختلفة',
-   'UNIQUE LABELERS': 'عدد اللابلرز الفريدين (محسوبين بالرقم القومي 14 رقم بالضبط)',
-   'OVERALL AVG SUBMIT': 'متوسط تسليم اللابلر الواحد = Total Submissions ÷ Unique Labelers'
+ // Tooltips for Table 2 (Floor Performance)
+ page.querySelectorAll('th[data-floor-sort], th[data-floor-tip]').forEach(th=>{
+  const col=th.dataset.floorSort||th.dataset.floorTip;
+  const info=FLOOR_HEADER_EXPLANATIONS[col];
+  if(info){
+   MeegTooltip.attach(th,()=>({
+    title:info.title,
+    badge:th.dataset.floorSort?'Click to Sort':'Column Info',
+    desc:info.desc,
+    note:info.note
+   }));
+  }
+ });
+
+ // Tooltips for QTC badges in Table 2
+ page.querySelectorAll('.floor-performance-section .q-badge.q-qtc').forEach(badge=>{
+  const row=badge.closest('tr');
+  const floorName=row?(row.querySelector('td b')?.textContent||'Floor'):'Floor';
+  const qtcData=badge.dataset.qtcs||'';
+  const qtcList=qtcData.split(',').map(s=>s.trim()).filter(Boolean);
+  MeegTooltip.attach(badge,()=>({
+   title:'Supervising QTCs: '+floorName,
+   badge:qtcList.length+' QTC'+(qtcList.length===1?'':'s'),
+   desc:'Quality Controllers active in this floor / room',
+   chips:qtcList,
+   note:'Supervising quality operations'
+  }));
+ });
+
+ // Tooltips for badges and overall bar
+ page.querySelectorAll('.an-overall-item').forEach(item=>{
+  const lbl=item.querySelector('.an-overall-lbl')?.textContent||'';
+  const val=item.querySelector('.an-overall-val')?.textContent||'';
+  const descMap={
+   'TOTAL SUBMISSIONS':'إجمالي عدد التاسكات المسلمة لجميع السجلات المطابقة للفلاتر',
+   'UNIQUE QTCS':'عدد مسؤولي الجودة (QTCs) الفريدين في النتائج المعروضة',
+   'UNIQUE FLOORS':'عدد الأدوار / الوحدات المكانية المختلفة',
+   'UNIQUE LABELERS':'عدد اللابلرز الفريدين (محسوبين بالرقم القومي 14 رقم بالضبط)',
+   'OVERALL AVG SUBMIT':'متوسط تسليم اللابلر الواحد = Total Submissions ÷ Unique Labelers'
   };
-  MeegTooltip.attach(item, () => ({
-   title: lbl,
-   badge: 'QTC & Floor KPI',
-   desc: descMap[lbl.trim().toUpperCase()] || 'Summary KPI metric',
-   rows: [{ label: 'Value', value: val, color: 'var(--accent)' }]
+  MeegTooltip.attach(item,()=>({
+   title:lbl,
+   badge:'QTC & Floor KPI',
+   desc:descMap[lbl.trim().toUpperCase()]||'Summary KPI metric',
+   rows:[{label:'Value',value:val,color:'var(--accent)'}]
   }));
  });
 
- page.querySelectorAll('.q-badge.q-shift').forEach(b => {
-  MeegTooltip.attach(b, () => ({
-   title: 'Shift ' + b.textContent,
-   badge: 'Shift',
-   desc: 'Work shift operating for this QTC & Floor team'
+ page.querySelectorAll('.q-badge.q-shift').forEach(b=>{
+  MeegTooltip.attach(b,()=>({
+   title:'Shift '+b.textContent,
+   badge:'Shift',
+   desc:'Work shift operating for this team / floor'
   }));
  });
 
- page.querySelectorAll('.q-badge.q-floor').forEach(b => {
-  MeegTooltip.attach(b, () => ({
-   title: 'Floor: ' + b.textContent,
-   badge: 'Location',
-   desc: 'Floor or production unit'
+ page.querySelectorAll('.q-badge.q-floor').forEach(b=>{
+  MeegTooltip.attach(b,()=>({
+   title:'Floor: '+b.textContent,
+   badge:'Location',
+   desc:'Floor or production unit'
   }));
  });
 
+ // Table 1 sorting
  page.querySelectorAll('th[data-qf-sort]').forEach(th=>{
   const col=th.dataset.qfSort;
   th.onclick=()=>{
@@ -2079,27 +2330,66 @@ function renderQtcFloorPerformance(){
   };
  });
 
+ // Table 2 sorting
+ page.querySelectorAll('th[data-floor-sort]').forEach(th=>{
+  const col=th.dataset.floorSort;
+  th.onclick=()=>{
+   if(floorPerformanceFilters.sortCol===col)floorPerformanceFilters.sortAsc=!floorPerformanceFilters.sortAsc;
+   else{floorPerformanceFilters.sortCol=col;floorPerformanceFilters.sortAsc=col==='floor';}
+   renderQtcFloorPerformance();
+  };
+ });
+
+ // Controls: input, selects, reset, CSV
  const searchInp=$('qfSearch');
  if(searchInp){
   searchInp.oninput=()=>{
    qtcFloorFilters.query=searchInp.value;
    qtcFloorFilters.page=0;
+   floorPerformanceFilters.page=0;
    renderQtcFloorPerformance();
    const el=$('qfSearch');
    if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}
   };
  }
- $('qfQtc')?.addEventListener('change',e=>{qtcFloorFilters.qtc=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
- $('qfFloor')?.addEventListener('change',e=>{qtcFloorFilters.floor=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
- $('qfShift')?.addEventListener('change',e=>{qtcFloorFilters.shift=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
- $('qfCategory')?.addEventListener('change',e=>{qtcFloorFilters.category=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
- $('qfReset')?.addEventListener('click',()=>{
-  Object.assign(qtcFloorFilters,{query:'',qtc:'',floor:'',shift:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0});
+ $('qfQtc')?.addEventListener('change',e=>{
+  qtcFloorFilters.qtc=e.target.value;
+  qtcFloorFilters.page=0;
+  floorPerformanceFilters.page=0;
   renderQtcFloorPerformance();
  });
- $('qfExportCSV')?.addEventListener('click',()=>exportQtcFloorCSV(filtered));
+ $('qfFloor')?.addEventListener('change',e=>{
+  qtcFloorFilters.floor=e.target.value;
+  qtcFloorFilters.page=0;
+  floorPerformanceFilters.page=0;
+  renderQtcFloorPerformance();
+ });
+ $('qfShift')?.addEventListener('change',e=>{
+  qtcFloorFilters.shift=e.target.value;
+  qtcFloorFilters.page=0;
+  floorPerformanceFilters.page=0;
+  renderQtcFloorPerformance();
+ });
+ $('qfCategory')?.addEventListener('change',e=>{
+  qtcFloorFilters.category=e.target.value;
+  qtcFloorFilters.page=0;
+  floorPerformanceFilters.page=0;
+  renderQtcFloorPerformance();
+ });
+ $('qfReset')?.addEventListener('click',()=>{
+  Object.assign(qtcFloorFilters,{query:'',qtc:'',floor:'',shift:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0});
+  Object.assign(floorPerformanceFilters,{sortCol:'totalSubmit',sortAsc:false,page:0});
+  renderQtcFloorPerformance();
+ });
+
+ $('qfExportCSV')?.addEventListener('click',()=>exportQtcFloorCSV(allQTCFloorGroups));
+ $('floorExportCSV')?.addEventListener('click',()=>exportFloorPerformanceCSV(allFloorGroups));
+
  $('qfPrev')?.addEventListener('click',()=>{if(qtcFloorFilters.page>0){qtcFloorFilters.page--;renderQtcFloorPerformance();}});
- $('qfNext')?.addEventListener('click',()=>{if(qtcFloorFilters.page<totalPages-1){qtcFloorFilters.page++;renderQtcFloorPerformance();}});
+ $('qfNext')?.addEventListener('click',()=>{if(qtcFloorFilters.page<qfTotalPages-1){qtcFloorFilters.page++;renderQtcFloorPerformance();}});
+
+ $('floorPrev')?.addEventListener('click',()=>{if(floorPerformanceFilters.page>0){floorPerformanceFilters.page--;renderQtcFloorPerformance();}});
+ $('floorNext')?.addEventListener('click',()=>{if(floorPerformanceFilters.page<floorTotalPages-1){floorPerformanceFilters.page++;renderQtcFloorPerformance();}});
 }
 
 renderAllSections=function(){
