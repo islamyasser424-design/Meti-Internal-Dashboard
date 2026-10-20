@@ -39,7 +39,10 @@ body{padding-left:232px}.ux-sidebar{position:fixed;inset:0 auto 0 0;width:232px;
 .an-cat-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .an-cat-title{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
 .an-cat-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--cat-bg,rgba(114,88,245,.1));color:var(--cat-color,var(--accent));text-transform:uppercase;letter-spacing:.5px}
-.an-cat-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:var(--bg-3);padding:12px 10px;border-radius:12px;border:1px solid var(--border)}
+.an-cat-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--bg-3);padding:12px 8px;border-radius:12px;border:1px solid var(--border)}
+@media(max-width:1450px){.an-cat-stats{grid-template-columns:repeat(2,1fr);gap:8px}}
+.ux-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ux-header-actions .btn{display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:8px 14px;border-radius:10px}
 .an-cat-stat{display:flex;flex-direction:column;align-items:center;text-align:center}
 .an-cat-stat-lbl{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .an-cat-stat-val{font-size:16px;font-weight:800;color:var(--text);font-family:var(--display)}

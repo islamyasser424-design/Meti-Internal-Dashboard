@@ -14,7 +14,7 @@ const analysis=document.createElement('section');analysis.id='uxAnalysis';analys
 document.body.appendChild(analysis);
 const performance=document.createElement('section');performance.id='uxPerformance';performance.hidden=true;document.body.appendChild(performance);
 const dailyPage=document.createElement('section');dailyPage.id='uxDaily';dailyPage.hidden=true;document.body.appendChild(dailyPage);
-const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><b>◈</b> MEEG<span style="display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:7px">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><small>QUICK ACTIONS</small><button class="ux-nav" id="uxSideRefresh">↻ &nbsp; Refresh data</button><button class="ux-nav" id="uxSideTheme">◐ &nbsp; Switch appearance</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
+const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><b>◈</b> MEEG<span style="display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:7px">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
 document.body.appendChild(aside);
 const menu=document.createElement('button');menu.className='btn ux-mobile';menu.textContent='☰ Menu';menu.setAttribute('aria-expanded','false');menu.setAttribute('aria-label','Open navigation');document.body.insertBefore(menu,root);
 const backdrop=document.createElement('button');backdrop.className='ux-backdrop';backdrop.setAttribute('aria-label','Close navigation');document.body.appendChild(backdrop);
@@ -22,7 +22,7 @@ function closeNav(){document.body.classList.remove('ux-sidebar-open');menu.setAt
 menu.onclick=()=>{const open=document.body.classList.toggle('ux-sidebar-open');menu.setAttribute('aria-expanded',String(open));if(open)aside.querySelector('button').focus();};backdrop.onclick=closeNav;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNav();menu.focus();}});
 function route(){const current=location.hash==='#analysis-overview'?'analysis':location.hash==='#performance-labelers'?'performance':location.hash==='#daily-report'?'daily':'dashboard';root.hidden=current!=='dashboard';analysis.hidden=current!=='analysis';performance.hidden=current!=='performance';dailyPage.hidden=current!=='daily';aside.querySelectorAll('[data-page]').forEach(b=>{const active=b.dataset.page===current;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});closeNav();queueMicrotask(()=>{renderAllSections();if(!root.hidden&&!rawRows.length&&getAuthToken())loadData();});}
-aside.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{location.hash=b.dataset.page==='analysis'?'analysis-overview':b.dataset.page==='performance'?'performance-labelers':b.dataset.page==='daily'?'daily-report':'dashboard';});$('uxBack').onclick=()=>location.hash='dashboard';$('uxSideRefresh').onclick=()=>loadData();$('uxSideTheme').onclick=()=>toggleDark();window.addEventListener('hashchange',route);route();
+aside.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{location.hash=b.dataset.page==='analysis'?'analysis-overview':b.dataset.page==='performance'?'performance-labelers':b.dataset.page==='daily'?'daily-report':'dashboard';});$('uxBack').onclick=()=>location.hash='dashboard';$('uxSideRefresh')?.addEventListener('click',()=>loadData());$('uxSideTheme')?.addEventListener('click',()=>toggleDark());window.addEventListener('hashchange',route);route();
 let view='both';let target=0;try{target=Math.max(0,Number(localStorage.getItem('meeg_personal_target'))||0);}catch(e){}
 function rowsInView(){return activeLoc&& !activeLoc.startsWith('__')&&locColIdx>=0?fcache.filter(r=>String(r[locColIdx]||'').trim()===activeLoc):fcache;}
 function uniq(rows,name){const i=hdrs.findIndex(h=>h.toLowerCase()===name.toLowerCase());return i<0?null:new Set(rows.map(r=>String(r[i]||'').trim()).filter(Boolean)).size;}
@@ -30,9 +30,37 @@ function daily(rows){const map=new Map();rows.forEach(r=>{const d=rDate(r);if(d)
 function spark(points){if(!points.length)return '';const max=Math.max(1,...points.map(p=>p[1]));return '<svg class="ux-spark" viewBox="0 0 200 32" preserveAspectRatio="none" aria-label="Daily submission trend"><polyline fill="none" stroke="currentColor" stroke-width="2.5" points="'+points.map((p,i)=>(points.length===1?100:i/(points.length-1)*200)+','+(30-p[1]/max*26)).join(' ')+'"/></svg>';}
 function animate(){overview.querySelectorAll('[data-count]').forEach(el=>{const value=Number(el.dataset.count);if(reduced()){el.textContent=value.toLocaleString();return;}const begin=performance.now();function tick(t){const p=Math.min(1,(t-begin)/650);el.textContent=Math.round(value*(1-Math.pow(1-p,3))).toLocaleString();if(p<1&&el.isConnected)requestAnimationFrame(tick);}requestAnimationFrame(tick);});}
 function applyView(){root.classList.toggle('ux-summary-hidden',view==='details');root.classList.toggle('ux-details-hidden',view==='summary');overview.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===view)));}
+function renderHeaderControlsHTML(prefix='ux'){
+ const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+ const themeLabel=isDark?'☀️ Light mode':'🌙 Dark mode';
+ return '<div class="ux-header-actions">'
+  +'<button class="btn btn-c '+prefix+'-btn-refresh" title="Refresh Google Sheet data">↻ Refresh data</button>'
+  +'<button class="btn '+prefix+'-btn-theme" title="Toggle appearance mode (Dark / Light)">'+themeLabel+'</button>'
+  +'</div>';
+}
+function bindHeaderControls(container,prefix='ux'){
+ if(!container)return;
+ container.querySelectorAll('.'+prefix+'-btn-refresh').forEach(btn=>{
+  btn.onclick=()=>loadData();
+ });
+ container.querySelectorAll('.'+prefix+'-btn-theme').forEach(btn=>{
+  btn.onclick=()=>{
+   toggleDark();
+   updateAllThemeButtons();
+  };
+ });
+}
+function updateAllThemeButtons(){
+ const isDark=document.documentElement.getAttribute('data-theme')==='dark';
+ const themeLabel=isDark?'☀️ Light mode':'🌙 Dark mode';
+ document.querySelectorAll('[class*="-btn-theme"]').forEach(b=>{
+  b.innerHTML=themeLabel;
+ });
+}
+
 function getCategorySummary(rows){
  const idx=name=>hdrs.findIndex(h=>String(h).trim().toLowerCase()===name);
- const ni=idx('national id'),mi=idx('modality'),pi=idx('pass'),li=idx('labeler name');
+ const ni=idx('national id'),mi=idx('modality'),pi=idx('pass'),li=idx('labeler name'),qi=idx('qtc name');
  const defs=[
   {key:'lidarFP',label:'Lidar FP',modality:'Lidar',pass:'FP',color:'#7258f5',bg:'rgba(114,88,245,0.12)',icon:'⚡'},
   {key:'lidarQA',label:'Lidar QA',modality:'Lidar',pass:'QA',color:'#15b8a6',bg:'rgba(21,184,166,0.12)',icon:'✓'},
@@ -44,9 +72,12 @@ function getCategorySummary(rows){
   tasks:0,
   labelerSet:new Set(),
   uniqueLabelers:0,
-  avgSubmit:'0'
+  avgSubmit:'0',
+  qtcSet:new Set(),
+  uniqueQtc:0
  }]));
  const overallLabelers=new Set();
+ const overallQtc=new Set();
  let overallTasks=0;
  rows.forEach(r=>{
   let lid='';
@@ -62,6 +93,10 @@ function getCategorySummary(rows){
    if(name)lid='name:'+name;
   }
   if(lid)overallLabelers.add(lid);
+
+  const qtc=qi>=0?String(r[qi]||'').normalize('NFC').trim().replace(/\s+/gu,' ').toLowerCase():'';
+  if(qtc)overallQtc.add(qtc);
+
   overallTasks++;
   const mod=mi<0?'':String(r[mi]??'').trim().toLowerCase().replace(/[\s_-]+/g,'');
   const pass=pi<0?'':String(r[pi]??'').trim().toUpperCase();
@@ -72,6 +107,7 @@ function getCategorySummary(rows){
    if(cat){
     cat.tasks++;
     if(lid)cat.labelerSet.add(lid);
+    if(qtc)cat.qtcSet.add(qtc);
    }
   }
  });
@@ -79,6 +115,7 @@ function getCategorySummary(rows){
   const cat=categories[d.key];
   cat.uniqueLabelers=cat.labelerSet.size;
   cat.avgSubmit=cat.uniqueLabelers>0?(cat.tasks/cat.uniqueLabelers).toFixed(1):'0';
+  cat.uniqueQtc=cat.qtcSet.size;
  });
  const overallUnique=overallLabelers.size;
  const overallAvg=overallUnique>0?(overallTasks/overallUnique).toFixed(1):'0';
@@ -88,7 +125,8 @@ function getCategorySummary(rows){
   overall:{
    tasks:overallTasks,
    uniqueLabelers:overallUnique,
-   avgSubmit:overallAvg
+   avgSubmit:overallAvg,
+   uniqueQtc:overallQtc.size
   }
  };
 }
@@ -102,7 +140,7 @@ function renderCategoryCardsHTML(summary,activeCategory='',scope='overview'){
    const cat=summary.categories[d.key];
    const isSel=activeCategory===d.key;
    const titleAction=isOverview?'Click to view '+d.label+' in Analysis':'Click to filter by '+d.label+(isSel?' (active)':'');
-   return '<article class="an-cat-card '+(isSel?'selected':'')+'" style="--cat-color:'+d.color+';--cat-bg:'+d.bg+'" data-cat="'+d.key+'" role="button" tabindex="0" aria-label="'+d.label+': '+cat.tasks.toLocaleString()+' tasks, '+cat.uniqueLabelers.toLocaleString()+' unique labelers, '+cat.avgSubmit+' avg submit per labeler" title="'+titleAction+'">'
+   return '<article class="an-cat-card '+(isSel?'selected':'')+'" style="--cat-color:'+d.color+';--cat-bg:'+d.bg+'" data-cat="'+d.key+'" role="button" tabindex="0" aria-label="'+d.label+': '+cat.tasks.toLocaleString()+' tasks, '+cat.uniqueLabelers.toLocaleString()+' unique labelers, '+cat.avgSubmit+' avg submit, '+cat.uniqueQtc.toLocaleString()+' unique QTC" title="'+titleAction+'">'
     +'<div class="an-cat-header">'
      +'<div class="an-cat-title"><span aria-hidden="true">'+d.icon+'</span> <span>'+d.label+'</span></div>'
      +'<span class="an-cat-badge">'+d.pass+'</span>'
@@ -117,8 +155,12 @@ function renderCategoryCardsHTML(summary,activeCategory='',scope='overview'){
       +'<strong class="an-cat-stat-val">'+cat.uniqueLabelers.toLocaleString()+'</strong>'
      +'</div>'
      +'<div class="an-cat-stat">'
-      +'<span class="an-cat-stat-lbl">Avg / Labeler</span>'
+      +'<span class="an-cat-stat-lbl">Avg Submit / Labeler</span>'
       +'<strong class="an-cat-stat-val highlight">'+cat.avgSubmit+'</strong>'
+     +'</div>'
+     +'<div class="an-cat-stat">'
+      +'<span class="an-cat-stat-lbl">Total Unique QTC</span>'
+      +'<strong class="an-cat-stat-val">'+cat.uniqueQtc.toLocaleString()+'</strong>'
      +'</div>'
     +'</div>'
    +'</article>';
@@ -137,10 +179,11 @@ const metrics=[
  ['Avg submit / labeler',window._firstDataReady||rawRows.length?catSummary.overall.avgSubmit:null,'Average submission tasks per unique labeler.','#df8b24'],
  ['Active queues',uniq(rows,'Queue Name'),'Distinct non-empty queues in the current selection.','#df5c99']
 ];
-overview.innerHTML='<div class="ux-heading"><div><div class="ux-eyebrow">Performance at a glance</div><h2>Productivity dashboard</h2><p>Explore your team’s output, one insight at a time.</p></div><div class="ux-tools"><label>From<input type="date" id="uxFrom" aria-label="Start date"></label><label>To<input type="date" id="uxTo" aria-label="End date"></label><button class="btn" id="uxRange">Apply range</button><button class="btn" id="uxCSV">↓ CSV</button><button class="btn" id="uxPrint">Print</button></div></div><div class="ux-grid">'+metrics.map(([label,value,note,tone],i)=>'<article class="ux-kpi" style="--tone:'+tone+'"><div class="ux-flipper"><div class="ux-face"><span class="ux-label" title="'+note+'">'+label+'</span><button class="ux-flip" data-flip="'+i+'" aria-label="Show '+label+' details" aria-expanded="false">↗</button><strong '+(value===null?'':'data-count="'+value+'"')+'>'+ (value===null?'—':value.toLocaleString())+'</strong><span class="ux-note">'+(value===null?(window._firstDataReady?'Column unavailable':'Waiting for data'):'Current filtered selection')+'</span>'+(i===0?spark(last):'<span class="ux-note" style="margin-top:auto;color:'+tone+'">'+(rows.length?'Live data · filtered view':'No matching data')+'</span>')+'</div><div class="ux-face ux-back" inert><b>'+label+'</b><p>'+note+'</p><span class="ux-note">'+(value===null?'Required column is missing.':'No previous-period comparison is assumed.')+'</span><button class="btn" data-unflip="'+i+'">Back</button></div></div></article>').join('')+'</div>'
+overview.innerHTML='<div class="ux-heading"><div><div class="ux-eyebrow">Performance at a glance</div><h2>Productivity dashboard</h2><p>Explore your team’s output, one insight at a time.</p></div><div class="ux-tools">'+renderHeaderControlsHTML('ov')+'<label>From<input type="date" id="uxFrom" aria-label="Start date"></label><label>To<input type="date" id="uxTo" aria-label="End date"></label><button class="btn" id="uxRange">Apply range</button><button class="btn" id="uxCSV">↓ CSV</button><button class="btn" id="uxPrint">Print</button></div></div><div class="ux-grid">'+metrics.map(([label,value,note,tone],i)=>'<article class="ux-kpi" style="--tone:'+tone+'"><div class="ux-flipper"><div class="ux-face"><span class="ux-label" title="'+note+'">'+label+'</span><button class="ux-flip" data-flip="'+i+'" aria-label="Show '+label+' details" aria-expanded="false">↗</button><strong '+(value===null?'':'data-count="'+value+'"')+'>'+ (value===null?'—':value.toLocaleString())+'</strong><span class="ux-note">'+(value===null?(window._firstDataReady?'Column unavailable':'Waiting for data'):'Current filtered selection')+'</span>'+(i===0?spark(last):'<span class="ux-note" style="margin-top:auto;color:'+tone+'">'+(rows.length?'Live data · filtered view':'No matching data')+'</span>')+'</div><div class="ux-face ux-back" inert><b>'+label+'</b><p>'+note+'</p><span class="ux-note">'+(value===null?'Required column is missing.':'No previous-period comparison is assumed.')+'</span><button class="btn" data-unflip="'+i+'">Back</button></div></div></article>').join('')+'</div>'
 +renderCategoryCardsHTML(catSummary,'','overview')
 +'<div class="ux-panels"><section class="ux-panel"><h3>Submission activity</h3><p>Latest 21 dates with activity. Select a bar to drill into that date.</p><div class="ux-bars">'+(last.length?last.map(([d,c])=>'<button class="ux-bar" style="height:'+Math.max(5,c/max*100)+'%" data-date="'+d+'" title="'+d+': '+c+' submissions" aria-label="'+d+', '+c+' submissions. Filter by this date."></button>').join(''):'<div class="ux-empty">No dated submissions match your selection. Adjust or clear the filters.</div>')+'</div><details><summary>View chart values</summary>'+last.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</details></section><section class="ux-panel"><h3>Personal submission target</h3><p>A target for this filtered selection, saved on this browser.</p><label class="ux-note">Target rows<input class="ux-target" id="uxTarget" type="number" min="1" step="1" placeholder="Set your target" value="'+(target||'')+'"></label><div id="uxProgress"></div></section></div><div class="ux-view-tabs" role="tablist" aria-label="Dashboard view"><button class="btn" role="tab" data-view="summary">Summary</button><button class="btn" role="tab" data-view="details">Details & tables</button><button class="btn" role="tab" data-view="both">Expanded view</button><button class="btn" id="uxCompare">Compare periods</button></div>';
 if(selD.size){const dates=[...selD].sort();$('uxFrom').value=dates[0];$('uxTo').value=dates[dates.length-1];}
+bindHeaderControls(overview,'ov');
 overview.querySelectorAll('[data-flip]').forEach(b=>b.onclick=()=>flip(b.dataset.flip,true));overview.querySelectorAll('[data-unflip]').forEach(b=>b.onclick=()=>flip(b.dataset.unflip,false));
 function flip(i,on){const card=overview.querySelectorAll('.ux-kpi')[i];card.classList.toggle('flipped',on);card.querySelector('.ux-face:not(.ux-back)').inert=on;card.querySelector('.ux-back').inert=!on;card.querySelector('[data-flip]').setAttribute('aria-expanded',String(on));card.querySelector(on?'[data-unflip]':'[data-flip]').focus();}
 overview.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;applyView();});
@@ -276,18 +319,10 @@ if(analysis.hidden)return;
  const base=rowsInView(),a=analysisAggregate(base,analysisFilters),catSummary=getCategorySummary(a.selected),labelerMetrics=labelerSubmissionMetrics(a.selected),si=hdrs.findIndex(h=>h.toLowerCase()==='shift');
  const shifts=[...new Set(base.map(r=>si>=0?String(r[si]||'').trim():'').filter(Boolean))].sort();const top=a.points.length?[...a.points].sort((a,b)=>b[1]-a[1])[0]:null;
  const palette=['#7258f5','#15b8a6','#ed9a35','#e9689e','#459ce8','#9ca53c','#b77bdb','#7689a3'];
- const kpis=[
-  ['Total submit',a.selected.length,'Filtered submission rows'],
-  ['Total Unique QTC',uniqueQtcCount(a.selected)??'—','Distinct Qtc Name · current filters'],
-  ['Unique labelers',catSummary.overall.uniqueLabelers,'Distinct labelers · current filters'],
-  ['Avg submit / labeler',catSummary.overall.avgSubmit,'Average submissions per unique labeler'],
-  ['Top day',top&&top[1]?top[0]:'—',top?top[1].toLocaleString()+' submissions':'No dated submissions'],
-  ['Leading shift',a.shifts.length?a.shifts[0][0]:'—',a.shifts.length?a.shifts[0][1].toLocaleString()+' submissions':'No submissions']
- ];
- analysis.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Team output · live insights</div><h2>Analysis Overview</h2><p>Submission trends and shift contribution · one row = one submit</p></div><button class="btn" id="anRefresh">↻ Refresh data</button></div><div class="ux-panel an-filters"><label>From<input id="anFrom" type="date" value="'+analysisFilters.from+'"></label><label>To<input id="anTo" type="date" value="'+analysisFilters.to+'"></label><label>Modality<select id="anMod"><option value="all">All modalities</option><option value="lane">Lane Line</option></select></label><label>Shift<select id="anShift"><option value="">All shifts</option>'+shifts.map(s=>'<option>'+esc(s)+'</option>').join('')+'</select></label><button class="btn btn-c" id="anApply">Apply filters</button><button class="btn" id="anReset">Reset</button><button class="btn" id="anDashboard">Dashboard filters ↗</button></div><p class="an-context">Uses current dashboard filters'+(activeLoc&&!activeLoc.startsWith('__')?' · '+esc(activeLoc):'')+'. These filters narrow that selection.</p>'
+ analysis.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Team output · live insights</div><h2>Analysis Overview</h2><p>Submission trends and shift contribution · one row = one submit</p></div>'+renderHeaderControlsHTML('an')+'</div><div class="ux-panel an-filters"><label>From<input id="anFrom" type="date" value="'+analysisFilters.from+'"></label><label>To<input id="anTo" type="date" value="'+analysisFilters.to+'"></label><label>Modality<select id="anMod"><option value="all">All modalities</option><option value="lane">Lane Line</option></select></label><label>Shift<select id="anShift"><option value="">All shifts</option>'+shifts.map(s=>'<option>'+esc(s)+'</option>').join('')+'</select></label><button class="btn btn-c" id="anApply">Apply filters</button><button class="btn" id="anReset">Reset</button><button class="btn" id="anDashboard">Dashboard filters ↗</button></div><p class="an-context">Uses current dashboard filters'+(activeLoc&&!activeLoc.startsWith('__')?' · '+esc(activeLoc):'')+'. These filters narrow that selection.</p>'
   +renderCategoryCardsHTML(catSummary,analysisFilters.category,'analysis')
-  +'<div class="ux-grid an-metrics">'+kpis.map(([label,val,note])=>'<article class="ux-panel"><span class="ux-label">'+label+'</span><strong class="an-value">'+esc(typeof val==='number'?val.toLocaleString():val)+'</strong><p>'+esc(note)+'</p></article>').join('')+'</div>'
   +'<div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><p>Click a date to filter. Hover or focus for the four category totals.</p><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
+ bindHeaderControls(analysis,'an');
  analysis.querySelectorAll('.an-cat-card[data-cat]').forEach(card=>{
   const cat=card.dataset.cat;
   card.onclick=()=>{
@@ -301,7 +336,7 @@ if(analysis.hidden)return;
  const resetBar=document.createElement('div');resetBar.className='an-selection-toolbar';
  const resetButton=document.createElement('button');resetButton.className='btn';resetButton.textContent='Clear all filters';resetButton.onclick=()=>{Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''});clearAll();refreshOpenSlicers();};
  const catLabel={'lidarFP':'Lidar FP','lidarQA':'Lidar QA','laneFP':'Lane Line FP','laneQA':'Lane Line QA'}[analysisFilters.category]||analysisFilters.category;
- const selectionText=document.createElement('span');selectionText.className='ux-note';selectionText.textContent=[analysisFilters.from&&('Date: '+analysisFilters.from+(analysisFilters.to!==analysisFilters.from?' → '+analysisFilters.to:'')),analysisFilters.shift,analysisFilters.unit,analysisFilters.qtc,catLabel].filter(Boolean).join(' · ')||'Select multiple values · changes apply immediately';resetBar.append(selectionText,resetButton);analysis.querySelector('.an-context').replaceWith(resetBar);$('anRefresh').onclick=()=>loadData();
+ const selectionText=document.createElement('span');selectionText.className='ux-note';selectionText.textContent=[analysisFilters.from&&('Date: '+analysisFilters.from+(analysisFilters.to!==analysisFilters.from?' → '+analysisFilters.to:'')),analysisFilters.shift,analysisFilters.unit,analysisFilters.qtc,catLabel].filter(Boolean).join(' · ')||'Select multiple values · changes apply immediately';resetBar.append(selectionText,resetButton);analysis.querySelector('.an-context').replaceWith(resetBar);
  if(!a.selected.length){$('anLine').innerHTML='<div class="ux-empty">'+(window._firstDataReady?'No submissions match these filters.':'Waiting for dashboard data…')+'</div>';$('anDonut').innerHTML='<div class="ux-empty">No shift distribution available.</div>';addAnalysisCharts(a);return;}
  if(!a.points.length)$('anLine').innerHTML='<div class="ux-empty">No valid dates available.</div>';
  else{
@@ -372,10 +407,10 @@ function renderPerformance(){
  const page=$('uxPerformance');if(!page||page.hidden)return;
  const data=performanceData(rowsInView(),perfFilters);const selected=data.people.find(p=>p.person===perfFilters.person);const tasks=perfFilters.person?data.tasks.filter(t=>t.person===perfFilters.person):data.tasks;
  const pageSize=25,totalPages=Math.max(1,Math.ceil(tasks.length/pageSize));perfFilters.page=Math.min(perfFilters.page,totalPages-1);const visible=tasks.slice(perfFilters.page*pageSize,(perfFilters.page+1)*pageSize);
- page.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Objects analysis · task tracking</div><h2>Performance per Labelers</h2><p>Ranked by Object Count. One submission row = one task entry.</p></div><button class="btn" id="perfRefresh">↻ Refresh data</button></div><div id="perfSlicers"></div><div class="ux-panel perf-controls"><label>From<input id="perfFrom" type="date"></label><label>To<input id="perfTo" type="date"></label><label>Category<select id="perfCategory"><option value="">All categories</option><option value="lidar FP">Lidar FP</option><option value="lidar QA">Lidar QA</option><option value="laneline FP">Lane Line FP</option><option value="laneline QA">Lane Line QA</option></select></label><label>Search<input id="perfQuery" placeholder="Labeler, QTC, shift or task ID"></label><button class="btn btn-c" id="perfApply">Apply</button><button class="btn" id="perfReset">Reset page filters</button></div><div class="ux-grid an-metrics" style="margin:20px 0">'+[['Total Objects',data.tasks.reduce((n,t)=>n+(t.objects??0),0)],['Labelers',data.people.length],['Task entries',data.tasks.length],['Largest task',data.tasks.find(t=>t.objects!==null)?.objects??'—']].map(([name,v])=>'<div class="ux-panel"><span class="ux-label">'+name+'</span><b class="an-value">'+(typeof v==='number'?v.toLocaleString():v)+'</b></div>').join('')+'</div><p class="an-context">Uses current Shift / Floor / QTC / Email filters. '+data.invalid+' entries have missing or invalid Object Count and are excluded from object totals. Labelers use National Id; missing IDs are grouped by exact normalized name.</p><section class="ux-panel"><h3>Labeler ranking · total objects ↓</h3><p>Select a labeler to inspect their largest tasks below.</p><div class="perf-table"><table><thead><tr><th>Rank</th><th>Labeler</th><th>Total Objects</th><th>Tasks</th><th>Largest task</th><th>Shifts</th><th>QTCs</th></tr></thead><tbody>'+data.people.map((p,i)=>'<tr><td>'+(i+1)+'</td><td><button class="perf-person" data-person-index="'+i+'">'+esc(p.name)+'</button>'+(p.fallback?'<small class="ux-note"> · matched by name</small>':'')+'</td><td>'+p.total.toLocaleString()+'</td><td>'+p.count.toLocaleString()+'</td><td>'+(p.largest===null?'—':p.largest.toLocaleString())+'</td><td>'+esc([...p.shifts].join(', '))+'</td><td>'+esc([...p.qtcs].join(', '))+'</td></tr>').join('')+'</tbody></table>'+(data.people.length?'':'<p class="ux-empty">No labelers match these filters.</p>')+'</div></section><section class="ux-panel" style="margin-top:20px" id="perfTasks"><div class="ux-heading"><div><h3>Largest tasks ↓'+(perfFilters.person?' · '+esc(selected?.name||'Selected labeler'):'')+'</h3><p>Shift, submitting QTC and day for each task.</p></div><button class="btn" id="perfAll">Show all labelers</button></div><div class="perf-table"><table><thead><tr><th>Labeler</th><th>Objects</th><th>Shift</th><th>Submitting QTC</th><th>Day</th><th>Modality</th><th>Pass</th><th>Task ID</th><th>Task</th></tr></thead><tbody>'+visible.map(t=>'<tr><td>'+esc(t.name)+'</td><td><b>'+(t.objects===null?'—':t.objects.toLocaleString())+'</b></td><td>'+esc(t.shift)+'</td><td>'+esc(t.qtc)+'</td><td>'+esc(t.date||'Unknown')+'</td><td>'+esc(t.mod)+'</td><td>'+esc(t.pass)+'</td><td>'+esc(t.id)+'</td><td>'+(/^https?:\/\//i.test(t.link)?'<a href="'+esc(t.link)+'" target="_blank" rel="noopener noreferrer">Open ↗</a>':'—')+'</td></tr>').join('')+'</tbody></table>'+(tasks.length?'':'<p class="ux-empty">No tasks match this selection.</p>')+'</div><div class="perf-pagination"><button class="btn" id="perfPrev">Previous</button><span>'+ (perfFilters.page+1)+' / '+totalPages+' · '+tasks.length.toLocaleString()+' task entries</span><button class="btn" id="perfNext">Next</button></div></section></div>';
+ page.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Objects analysis · task tracking</div><h2>Performance per Labelers</h2><p>Ranked by Object Count. One submission row = one task entry.</p></div>'+renderHeaderControlsHTML('perf')+'</div><div id="perfSlicers"></div><div class="ux-panel perf-controls"><label>From<input id="perfFrom" type="date"></label><label>To<input id="perfTo" type="date"></label><label>Category<select id="perfCategory"><option value="">All categories</option><option value="lidar FP">Lidar FP</option><option value="lidar QA">Lidar QA</option><option value="laneline FP">Lane Line FP</option><option value="laneline QA">Lane Line QA</option></select></label><label>Search<input id="perfQuery" placeholder="Labeler, QTC, shift or task ID"></label><button class="btn btn-c" id="perfApply">Apply</button><button class="btn" id="perfReset">Reset page filters</button></div><div class="ux-grid an-metrics" style="margin:20px 0">'+[['Total Objects',data.tasks.reduce((n,t)=>n+(t.objects??0),0)],['Labelers',data.people.length],['Task entries',data.tasks.length],['Largest task',data.tasks.find(t=>t.objects!==null)?.objects??'—']].map(([name,v])=>'<div class="ux-panel"><span class="ux-label">'+name+'</span><b class="an-value">'+(typeof v==='number'?v.toLocaleString():v)+'</b></div>').join('')+'</div><p class="an-context">Uses current Shift / Floor / QTC / Email filters. '+data.invalid+' entries have missing or invalid Object Count and are excluded from object totals. Labelers use National Id; missing IDs are grouped by exact normalized name.</p><section class="ux-panel"><h3>Labeler ranking · total objects ↓</h3><p>Select a labeler to inspect their largest tasks below.</p><div class="perf-table"><table><thead><tr><th>Rank</th><th>Labeler</th><th>Total Objects</th><th>Tasks</th><th>Largest task</th><th>Shifts</th><th>QTCs</th></tr></thead><tbody>'+data.people.map((p,i)=>'<tr><td>'+(i+1)+'</td><td><button class="perf-person" data-person-index="'+i+'">'+esc(p.name)+'</button>'+(p.fallback?'<small class="ux-note"> · matched by name</small>':'')+'</td><td>'+p.total.toLocaleString()+'</td><td>'+p.count.toLocaleString()+'</td><td>'+(p.largest===null?'—':p.largest.toLocaleString())+'</td><td>'+esc([...p.shifts].join(', '))+'</td><td>'+esc([...p.qtcs].join(', '))+'</td></tr>').join('')+'</tbody></table>'+(data.people.length?'':'<p class="ux-empty">No labelers match these filters.</p>')+'</div></section><section class="ux-panel" style="margin-top:20px" id="perfTasks"><div class="ux-heading"><div><h3>Largest tasks ↓'+(perfFilters.person?' · '+esc(selected?.name||'Selected labeler'):'')+'</h3><p>Shift, submitting QTC and day for each task.</p></div><button class="btn" id="perfAll">Show all labelers</button></div><div class="perf-table"><table><thead><tr><th>Labeler</th><th>Objects</th><th>Shift</th><th>Submitting QTC</th><th>Day</th><th>Modality</th><th>Pass</th><th>Task ID</th><th>Task</th></tr></thead><tbody>'+visible.map(t=>'<tr><td>'+esc(t.name)+'</td><td><b>'+(t.objects===null?'—':t.objects.toLocaleString())+'</b></td><td>'+esc(t.shift)+'</td><td>'+esc(t.qtc)+'</td><td>'+esc(t.date||'Unknown')+'</td><td>'+esc(t.mod)+'</td><td>'+esc(t.pass)+'</td><td>'+esc(t.id)+'</td><td>'+(/^https?:\/\//i.test(t.link)?'<a href="'+esc(t.link)+'" target="_blank" rel="noopener noreferrer">Open ↗</a>':'—')+'</td></tr>').join('')+'</tbody></table>'+(tasks.length?'':'<p class="ux-empty">No tasks match this selection.</p>')+'</div><div class="perf-pagination"><button class="btn" id="perfPrev">Previous</button><span>'+ (perfFilters.page+1)+' / '+totalPages+' · '+tasks.length.toLocaleString()+' task entries</span><button class="btn" id="perfNext">Next</button></div></section></div>';
  $('perfSlicers').appendChild(createListSlicers());$('perfFrom').value=perfFilters.from;$('perfTo').value=perfFilters.to;$('perfCategory').value=perfFilters.category;$('perfQuery').value=perfFilters.query;
  $('perfApply').onclick=()=>{const from=$('perfFrom').value,to=$('perfTo').value;if(from&&to&&from>to){showToast('Choose a valid date range.');return;}Object.assign(perfFilters,{from,to,day:from||to?'':perfFilters.day,week:from||to?'':perfFilters.week,category:$('perfCategory').value,query:$('perfQuery').value.trim(),person:'',page:0});renderPerformance();};$('perfQuery').onkeydown=e=>{if(e.key==='Enter')$('perfApply').click();};
- $('perfReset').onclick=()=>{Object.assign(perfFilters,{from:'',to:'',day:'',week:'',category:'',query:'',person:'',page:0});renderPerformance();};$('perfRefresh').onclick=()=>loadData();
+ $('perfReset').onclick=()=>{Object.assign(perfFilters,{from:'',to:'',day:'',week:'',category:'',query:'',person:'',page:0});renderPerformance();};bindHeaderControls(page,'perf');
  page.querySelectorAll('[data-person-index]').forEach(b=>b.onclick=()=>{perfFilters.person=data.people[Number(b.dataset.personIndex)].person;perfFilters.page=0;renderPerformance();$('perfTasks').scrollIntoView({behavior:reduced()?'instant':'smooth'});});
  $('perfAll').onclick=()=>{perfFilters.person='';perfFilters.page=0;renderPerformance();};$('perfPrev').disabled=perfFilters.page===0;$('perfNext').disabled=perfFilters.page>=totalPages-1;$('perfPrev').onclick=()=>{perfFilters.page--;renderPerformance();};$('perfNext').onclick=()=>{perfFilters.page++;renderPerformance();};
 }
@@ -403,8 +438,8 @@ function renderDailyReport(){
  const page=$('uxDaily');if(!page||page.hidden)return;
  if(!window._firstDataReady&&!hdrs.length){const error=$('mainContent')?.querySelector('.errbox');page.innerHTML='<div class="ux-overview"><div class="ux-heading"><h2>Daily Report</h2></div><div class="ux-panel"><h3>'+(error?'Data could not be loaded':'Waiting for source data')+'</h3><p>'+esc(error?error.textContent.replace('↻ Retry','').trim():'The report and slicer values will appear after the sheet finishes loading. You can choose a day from the calendar above.')+'</p><button class="btn btn-c" id="dailyRetry" style="margin-top:16px">↻ Retry data load</button></div></div>';$('dailyRetry').onclick=()=>loadData();return;}
 const report=dailyQueueReport(rowsInView(),rawRows);const days=[...selD].sort();
- page.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Queue activity · FP / QA</div><h2>Daily Report</h2><p>'+esc(days.length===1?days[0]:days.length?days[0]+' → '+days[days.length-1]:'All dates · choose a day from the shared date filter above')+'</p></div><button class="btn" id="dailyRefresh">↻ Refresh data</button></div><div id="dailyShift"></div><section class="ux-panel"><h3>Queue daily summary</h3><p>Unique Labelers use valid National Id, once per Queue + Modality + Pass. Queues with zero FP and QA submissions are hidden.</p><div class="perf-table daily-table"><table><thead><tr><th>Queue</th><th>Unique Labelers (FP)</th><th>Total Submit (FP)</th><th>Unique Labelers (QA)</th><th>Total Submit (QA)</th></tr></thead><tbody>'+report.groups.filter(g=>g.fp>0||g.qa>0).map(g=>'<tr><td>'+esc(g.name)+' <span class="daily-mod '+(g.mod==='Lidar'?'daily-lidar':'daily-lane')+'">('+esc(g.mod)+')</span></td><td>'+(report.hasNational?g.fpIds.size.toLocaleString():'—')+'</td><td>'+g.fp.toLocaleString()+'</td><td>'+(report.hasNational?g.qaIds.size.toLocaleString():'—')+'</td><td>'+g.qa.toLocaleString()+'</td></tr>').join('')+'</tbody></table>'+(!report.hasQueue||!report.hasPass?'<p class="ux-empty">Queue Name and Pass columns are required.</p>':report.groups.some(g=>g.fp>0||g.qa>0)?'':'<p class="ux-empty">No queue submissions match the current filters.</p>')+'</div><p class="an-context">'+report.groups.reduce((n,g)=>n+g.missing,0)+' FP/QA entries have missing or invalid National Id; included in submit totals, excluded from unique counts.</p></section></div>';
- const slicers=createListSlicers();[...slicers.children].slice(1).forEach(el=>el.remove());$('dailyShift').appendChild(slicers);$('dailyRefresh').onclick=()=>loadData();
+ page.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Queue activity · FP / QA</div><h2>Daily Report</h2><p>'+esc(days.length===1?days[0]:days.length?days[0]+' → '+days[days.length-1]:'All dates · choose a day from the shared date filter above')+'</p></div>'+renderHeaderControlsHTML('daily')+'</div><div id="dailyShift"></div><section class="ux-panel"><h3>Queue daily summary</h3><p>Unique Labelers use valid National Id, once per Queue + Modality + Pass. Queues with zero FP and QA submissions are hidden.</p><div class="perf-table daily-table"><table><thead><tr><th>Queue</th><th>Unique Labelers (FP)</th><th>Total Submit (FP)</th><th>Unique Labelers (QA)</th><th>Total Submit (QA)</th></tr></thead><tbody>'+report.groups.filter(g=>g.fp>0||g.qa>0).map(g=>'<tr><td>'+esc(g.name)+' <span class="daily-mod '+(g.mod==='Lidar'?'daily-lidar':'daily-lane')+'">('+esc(g.mod)+')</span></td><td>'+(report.hasNational?g.fpIds.size.toLocaleString():'—')+'</td><td>'+g.fp.toLocaleString()+'</td><td>'+(report.hasNational?g.qaIds.size.toLocaleString():'—')+'</td><td>'+g.qa.toLocaleString()+'</td></tr>').join('')+'</tbody></table>'+(!report.hasQueue||!report.hasPass?'<p class="ux-empty">Queue Name and Pass columns are required.</p>':report.groups.some(g=>g.fp>0||g.qa>0)?'':'<p class="ux-empty">No queue submissions match the current filters.</p>')+'</div><p class="an-context">'+report.groups.reduce((n,g)=>n+g.missing,0)+' FP/QA entries have missing or invalid National Id; included in submit totals, excluded from unique counts.</p></section></div>';
+ const slicers=createListSlicers();[...slicers.children].slice(1).forEach(el=>el.remove());$('dailyShift').appendChild(slicers);bindHeaderControls(page,'daily');
 }
 
 
