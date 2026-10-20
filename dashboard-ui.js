@@ -3,6 +3,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let protectedOptions=null;
+const queuesFilters={query:'',shift:'',floor:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0,pageSize:25};
 const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 const root=document.createElement('div');root.id='uxDashboard';
 const start=document.querySelector('.hdr'),end=$('mainContent');
@@ -14,15 +15,22 @@ const analysis=document.createElement('section');analysis.id='uxAnalysis';analys
 document.body.appendChild(analysis);
 const performance=document.createElement('section');performance.id='uxPerformance';performance.hidden=true;document.body.appendChild(performance);
 const dailyPage=document.createElement('section');dailyPage.id='uxDaily';dailyPage.hidden=true;document.body.appendChild(dailyPage);
-const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><b>◈</b> MEEG<span style="display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:7px">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
+const queuesPage=document.createElement('section');queuesPage.id='uxQueues';queuesPage.hidden=true;document.body.appendChild(queuesPage);
+const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><b>◈</b> MEEG<span style="display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:7px">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="queues">☷ &nbsp; Queues Analysis</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
 document.body.appendChild(aside);
 const menu=document.createElement('button');menu.className='btn ux-mobile';menu.textContent='☰ Menu';menu.setAttribute('aria-expanded','false');menu.setAttribute('aria-label','Open navigation');document.body.insertBefore(menu,root);
 const backdrop=document.createElement('button');backdrop.className='ux-backdrop';backdrop.setAttribute('aria-label','Close navigation');document.body.appendChild(backdrop);
 function closeNav(){document.body.classList.remove('ux-sidebar-open');menu.setAttribute('aria-expanded','false');}
 menu.onclick=()=>{const open=document.body.classList.toggle('ux-sidebar-open');menu.setAttribute('aria-expanded',String(open));if(open)aside.querySelector('button').focus();};backdrop.onclick=closeNav;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNav();menu.focus();}});
-function route(){const current=location.hash==='#analysis-overview'?'analysis':location.hash==='#performance-labelers'?'performance':location.hash==='#daily-report'?'daily':'dashboard';root.hidden=current!=='dashboard';analysis.hidden=current!=='analysis';performance.hidden=current!=='performance';dailyPage.hidden=current!=='daily';aside.querySelectorAll('[data-page]').forEach(b=>{const active=b.dataset.page===current;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});closeNav();queueMicrotask(()=>{renderAllSections();if(!root.hidden&&!rawRows.length&&getAuthToken())loadData();});}
-aside.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{location.hash=b.dataset.page==='analysis'?'analysis-overview':b.dataset.page==='performance'?'performance-labelers':b.dataset.page==='daily'?'daily-report':'dashboard';});$('uxBack').onclick=()=>location.hash='dashboard';$('uxSideRefresh')?.addEventListener('click',()=>loadData());$('uxSideTheme')?.addEventListener('click',()=>toggleDark());window.addEventListener('hashchange',route);route();
+function route(){const current=location.hash==='#analysis-overview'?'analysis':location.hash==='#queues-analysis'?'queues':location.hash==='#performance-labelers'?'performance':location.hash==='#daily-report'?'daily':'dashboard';root.hidden=current!=='dashboard';analysis.hidden=current!=='analysis';queuesPage.hidden=current!=='queues';performance.hidden=current!=='performance';dailyPage.hidden=current!=='daily';aside.querySelectorAll('[data-page]').forEach(b=>{const active=b.dataset.page===current;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});closeNav();
+ if(current==='queues'&&typeof renderQueuesAnalysis==='function')renderQueuesAnalysis();
+ else if(current==='analysis'&&typeof renderAnalysis==='function')renderAnalysis();
+ else if(current==='performance'&&typeof renderPerformance==='function')renderPerformance();
+ else if(current==='daily'&&typeof renderDailyReport==='function')renderDailyReport();
+ else if(typeof renderOverview==='function')renderOverview();
+ queueMicrotask(()=>{renderAllSections();if(!root.hidden&&!rawRows.length&&getAuthToken())loadData();});}
+aside.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{location.hash=b.dataset.page==='analysis'?'analysis-overview':b.dataset.page==='queues'?'queues-analysis':b.dataset.page==='performance'?'performance-labelers':b.dataset.page==='daily'?'daily-report':'dashboard';});$('uxBack').onclick=()=>location.hash='dashboard';$('uxSideRefresh')?.addEventListener('click',()=>loadData());$('uxSideTheme')?.addEventListener('click',()=>toggleDark());window.addEventListener('hashchange',route);route();
 let view='both';let target=0;try{target=Math.max(0,Number(localStorage.getItem('meeg_personal_target'))||0);}catch(e){}
 function rowsInView(){return activeLoc&& !activeLoc.startsWith('__')&&locColIdx>=0?fcache.filter(r=>String(r[locColIdx]||'').trim()===activeLoc):fcache;}
 function uniq(rows,name){const i=hdrs.findIndex(h=>h.toLowerCase()===name.toLowerCase());return i<0?null:new Set(rows.map(r=>String(r[i]||'').trim()).filter(Boolean)).size;}
@@ -357,14 +365,14 @@ if(analysis.hidden)return;
 function bookmarkKey(){return 'meeg_filter_bookmarks_v1:'+String(getLoggedInEmail()||'guest').toLowerCase();}
 function readBookmarks(){try{const data=JSON.parse(localStorage.getItem(bookmarkKey())||'[]');return Array.isArray(data)?data.filter(b=>b&&typeof b.id==='string'&&typeof b.name==='string'&&b.state):[];}catch(e){return [];}}
 function writeBookmarks(items){try{localStorage.setItem(bookmarkKey(),JSON.stringify(items));return true;}catch(e){showToast('Bookmarks could not be saved. Check browser storage.');return false;}}
-function captureBookmark(){const input=$('idFilterInput');return {sel:Object.fromEntries(Object.entries(sel).map(([k,v])=>[k,[...v]])),selD:[...selD],selWeeks:[...selWeeks],idFilter:input?input.value.trim():idFilter,timeFrom,timeTo,timePreset,shifts:Object.fromEntries(Object.entries(shiftState).map(([k,v])=>[k,!!v.on])),activeLoc,analysis:{...analysisFilters},view,page:location.hash==='#analysis-overview'?'analysis-overview':location.hash==='#performance-labelers'?'performance-labelers':location.hash==='#daily-report'?'daily-report':'dashboard'};}
+function captureBookmark(){const input=$('idFilterInput');return {sel:Object.fromEntries(Object.entries(sel).map(([k,v])=>[k,[...v]])),selD:[...selD],selWeeks:[...selWeeks],idFilter:input?input.value.trim():idFilter,timeFrom,timeTo,timePreset,shifts:Object.fromEntries(Object.entries(shiftState).map(([k,v])=>[k,!!v.on])),activeLoc,analysis:{...analysisFilters},view,page:location.hash==='#analysis-overview'?'analysis-overview':location.hash==='#queues-analysis'?'queues-analysis':location.hash==='#performance-labelers'?'performance-labelers':location.hash==='#daily-report'?'daily-report':'dashboard'};}
 function applyBookmark(state){
  clearTimeout(_idFilterDebounce);
  Object.keys(sel).forEach(k=>sel[k].clear());Object.entries(state.sel||{}).forEach(([k,values])=>{if(Array.isArray(values))sel[k]=new Set(values);});
  selD=new Set(state.selD||[]);selWeeks=new Set(state.selWeeks||[]);idFilter=state.idFilter||'';timeFrom=state.timeFrom||'';timeTo=state.timeTo||'';timePreset=TIME_SHIFTS[state.timePreset]?state.timePreset:'';
  setShiftsUI(state.shifts||{});activeLoc=['__all__','__totalsubmit__','__topperf__','__quality__',...locations].includes(state.activeLoc)?state.activeLoc:'__all__';
  Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''},state.analysis||{});view=['summary','details','both'].includes(state.view)?state.view:'both';
- closeAll();buildStrip();applyAll();location.hash=['analysis-overview','performance-labelers','daily-report'].includes(state.page)?state.page:'dashboard';route();
+ closeAll();buildStrip();applyAll();location.hash=['analysis-overview','queues-analysis','performance-labelers','daily-report'].includes(state.page)?state.page:'dashboard';route();
 }
 const bookmarks=document.createElement('section');bookmarks.className='ux-bookmarks';bookmarks.setAttribute('aria-label','Saved filter bookmarks');bookmarks.innerHTML='<span class="ux-bookmark-icon" aria-hidden="true">☆</span><label for="uxBookmarkList">Filter bookmarks</label><select id="uxBookmarkList" aria-label="Saved filter bookmark"><option value="">Choose a bookmark…</option></select><button class="btn" id="uxBookmarkApply">Apply</button><button class="btn" id="uxBookmarkDelete">Delete</button><form id="uxBookmarkForm"><input id="uxBookmarkName" aria-label="New bookmark name" placeholder="Name this filter selection…" maxlength="60" required><button class="btn btn-c" type="submit">☆ Save bookmark</button></form><span class="ux-note">Saved on this browser</span>';
 document.body.insertBefore(bookmarks,root);
@@ -373,7 +381,7 @@ $('uxBookmarkList').onchange=()=>{const disabled=!$('uxBookmarkList').value;$('u
 $('uxBookmarkForm').onsubmit=e=>{e.preventDefault();const name=$('uxBookmarkName').value.trim();if(!name){$('uxBookmarkName').focus();return;}const items=readBookmarks();if(items.some(b=>b.name.toLowerCase()===name.toLowerCase())){showToast('This name already exists. Choose another bookmark name.');return;}const id=typeof crypto.randomUUID==='function'?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);items.push({id,name,state:captureBookmark(),createdAt:new Date().toISOString()});if(writeBookmarks(items)){renderBookmarkList(id);$('uxBookmarkName').value='';showToast('Filter bookmark saved: '+name);}};
 $('uxBookmarkApply').onclick=()=>{if(!window._firstDataReady){showToast('Wait for dashboard data to load before applying a bookmark.');return;}const item=readBookmarks().find(b=>b.id===$('uxBookmarkList').value);if(!item)return;applyBookmark(item.state);showToast('Bookmark applied: '+item.name);};
 $('uxBookmarkDelete').onclick=()=>{const items=readBookmarks(),id=$('uxBookmarkList').value,item=items.find(b=>b.id===id);if(!item)return;if(writeBookmarks(items.filter(b=>b.id!==id))){renderBookmarkList();showToastUndo('Bookmark deleted: '+item.name,'Undo',()=>{const latest=readBookmarks();if(!latest.some(b=>b.id===item.id)){latest.push(item);if(writeBookmarks(latest))renderBookmarkList(item.id);}});}};
-let bookmarkAccount=bookmarkKey();const bookmarkUserObserver=new MutationObserver(()=>{const key=bookmarkKey();if(key!==bookmarkAccount){bookmarkAccount=key;renderBookmarkList();}});bookmarkUserObserver.observe($('userName'),{childList:true,subtree:true});window.addEventListener('storage',e=>{if(e.key===bookmarkKey())renderBookmarkList();});renderBookmarkList();
+let bookmarkAccount=bookmarkKey();const bookmarkUserObserver=new MutationObserver(()=>{const key=bookmarkKey();if(key!==bookmarkAccount){bookmarkAccount=key;renderBookmarkList();}});if($('userName'))bookmarkUserObserver.observe($('userName'),{childList:true,subtree:true});window.addEventListener('storage',e=>{if(e.key===bookmarkKey())renderBookmarkList();});renderBookmarkList();
 
 /* A single filter drawer shared by every page. */
 const filterButton=document.createElement('button');filterButton.className='ux-nav';filterButton.id='uxOpenFilters';filterButton.textContent='☆  Bookmark / Filters';filterButton.setAttribute('aria-expanded','false');filterButton.setAttribute('aria-controls','uxFilterDrawer');aside.insertBefore(filterButton,aside.querySelector('footer'));
@@ -444,7 +452,7 @@ const report=dailyQueueReport(rowsInView(),rawRows);const days=[...selD].sort();
 
 
 
-const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady)renderDailyReport();});sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
+const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady){renderDailyReport();if(typeof renderQueuesAnalysis==='function')renderQueuesAnalysis();}});if($('mainContent'))sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
 
 
 
@@ -702,6 +710,363 @@ rDate=function(row){
 
 const oldRender=renderAllSections;
 
+
+/* ============ Queues Analysis Logic ============ */
+/* queuesFilters declared at top */
+
+function queuesAggregateData(rows){
+ const idx=name=>hdrs.findIndex(h=>String(h).trim().toLowerCase()===name);
+ const qi=idx('queue name'),si=idx('shift'),fi=hdrs.findIndex(h=>['floor','unit'].includes(String(h).trim().toLowerCase()));
+ const qci=idx('qtc name'),mi=idx('modality'),pi=idx('pass'),ni=idx('national id'),li=idx('labeler name');
+
+ const queueMap=new Map();
+
+ rows.forEach(r=>{
+  const qName=qi>=0?String(r[qi]||'').trim():'';
+  if(!qName)return;
+
+  if(!queueMap.has(qName)){
+   queueMap.set(qName,{
+    name:qName,
+    shifts:new Set(),
+    floors:new Set(),
+    qtcs:new Set(),
+    labelers:new Set(),
+    totalSubmit:0,
+    lidarFP:0,
+    lidarQA:0,
+    laneFP:0,
+    laneQA:0
+   });
+  }
+
+  const item=queueMap.get(qName);
+
+  const shift=si>=0?String(r[si]||'').trim():'';
+  if(shift)item.shifts.add(shift);
+
+  const floor=fi>=0?String(r[fi]||'').trim():'';
+  if(floor)item.floors.add(floor);
+
+  const qtc=qci>=0?String(r[qci]||'').normalize('NFC').trim().replace(/\s+/gu,' '):'';
+  if(qtc)item.qtcs.add(qtc);
+
+  let lid='';
+  if(ni>=0){
+   const rawNi=String(r[ni]??'').trim()
+    .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632))
+    .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776))
+    .replace(/\.0+$/,'').replace(/[\s-]/g,'');
+   if(/^\d{14}$/.test(rawNi))lid=rawNi;
+  }
+  if(!lid&&li>=0){
+   const name=String(r[li]??'').trim().toLowerCase();
+   if(name)lid='name:'+name;
+  }
+  if(lid)item.labelers.add(lid);
+
+  item.totalSubmit++;
+
+  const mod=mi<0?'':String(r[mi]??'').trim().toLowerCase().replace(/[\s_-]+/g,'');
+  const pass=pi<0?'':String(r[pi]??'').trim().toUpperCase();
+  const prefix=mod==='lidar'?'lidar':(mod==='laneline'||mod==='lane')?'lane':'';
+  if(prefix&&(pass==='FP'||pass==='QA')){
+   const key=prefix+pass;
+   if(item[key]!==undefined)item[key]++;
+  }
+ });
+
+ return [...queueMap.values()].map(q=>{
+  const uniqueLabelers=q.labelers.size;
+  const avgSubmit=uniqueLabelers>0?(q.totalSubmit/uniqueLabelers).toFixed(1):'0';
+  return {
+   name:q.name,
+   shifts:[...q.shifts].sort(),
+   floors:[...q.floors].sort(),
+   qtcs:[...q.qtcs].sort(),
+   totalSubmit:q.totalSubmit,
+   lidarFP:q.lidarFP,
+   lidarQA:q.lidarQA,
+   laneFP:q.laneFP,
+   laneQA:q.laneQA,
+   uniqueLabelers,
+   avgSubmit:Number(avgSubmit),
+   avgSubmitStr:avgSubmit,
+   uniqueQtc:q.qtcs.size
+  };
+ });
+}
+
+function exportQueuesCSV(queues){
+ if(!queues.length){showToast('No queues to export.');return;}
+ const headers=['Queue Name','Shifts','Floors / Units','QTC Names','Total Unique QTC','Lidar FP Submit','Lidar QA Submit','Lane Line FP Submit','Lane Line QA Submit','Total Submit','Unique Labelers','Avg Submit / Labeler'];
+ const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replace(/"/g,'""')+'"';
+ const rows=queues.map(q=>[
+  q.name,
+  q.shifts.join('; '),
+  q.floors.join('; '),
+  q.qtcs.join('; '),
+  q.uniqueQtc,
+  q.lidarFP,
+  q.lidarQA,
+  q.laneFP,
+  q.laneQA,
+  q.totalSubmit,
+  q.uniqueLabelers,
+  q.avgSubmitStr
+ ]);
+ const csv=[headers,...rows].map(r=>r.map(cell).join(',')).join('\r\n');
+ downloadBlob(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),'MEEG_queues_analysis_'+cairoToday()+'.csv');
+ showToast('Queues analysis exported to CSV.');
+}
+
+function renderQueuesAnalysis(){
+ const page=$('uxQueues');
+ if(!page||page.hidden)return;
+
+ if(!window._firstDataReady&&!hdrs.length){
+  const error=$('mainContent')?.querySelector('.errbox');
+  page.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Queue breakdown · Shifts & Floors & QTCs</div><h2>Queues Analysis</h2><p>Submission volume, shifts, floors, and QTC distribution per queue</p></div>'+renderHeaderControlsHTML('queues')+'</div><div class="ux-panel"><h3>'+(error?'Data could not be loaded':'Waiting for source data')+'</h3><p>'+esc(error?error.textContent.replace('↻ Retry','').trim():'Queues analysis will appear once dashboard data is loaded.')+'</p><button class="btn btn-c" id="qRetry" style="margin-top:16px">↻ Retry data load</button></div></div>';
+  bindHeaderControls(page,'queues');
+  $('qRetry')?.addEventListener('click',()=>loadData());
+  return;
+ }
+
+ const base=rowsInView();
+ const catSummary=getCategorySummary(base);
+ const allQueues=queuesAggregateData(base);
+
+ const allShifts=[...new Set(allQueues.flatMap(q=>q.shifts))].sort();
+ const allFloors=[...new Set(allQueues.flatMap(q=>q.floors))].sort();
+
+ // Filter queues
+ const qFilter=queuesFilters.query.toLowerCase().trim();
+ const filtered=allQueues.filter(q=>{
+  if(queuesFilters.shift&&!q.shifts.includes(queuesFilters.shift))return false;
+  if(queuesFilters.floor&&!q.floors.includes(queuesFilters.floor))return false;
+  if(queuesFilters.category){
+   if(queuesFilters.category==='lidarFP'&&q.lidarFP===0)return false;
+   if(queuesFilters.category==='lidarQA'&&q.lidarQA===0)return false;
+   if(queuesFilters.category==='laneFP'&&q.laneFP===0)return false;
+   if(queuesFilters.category==='laneQA'&&q.laneQA===0)return false;
+  }
+  if(qFilter){
+   const matchName=q.name.toLowerCase().includes(qFilter);
+   const matchShifts=q.shifts.some(s=>s.toLowerCase().includes(qFilter));
+   const matchFloors=q.floors.some(f=>f.toLowerCase().includes(qFilter));
+   const matchQtcs=q.qtcs.some(qc=>qc.toLowerCase().includes(qFilter));
+   if(!matchName&&!matchShifts&&!matchFloors&&!matchQtcs)return false;
+  }
+  return true;
+ });
+
+ // Sort
+ const col=queuesFilters.sortCol;
+ const asc=queuesFilters.sortAsc;
+ filtered.sort((a,b)=>{
+  let va=a[col],vb=b[col];
+  if(typeof va==='string')return asc?va.localeCompare(vb):vb.localeCompare(va);
+  return asc?(va-vb):(vb-va);
+ });
+
+ // Compute selection summary stats
+ const totalTasks=filtered.reduce((n,q)=>n+q.totalSubmit,0);
+ const totalLidarFP=filtered.reduce((n,q)=>n+q.lidarFP,0);
+ const totalLidarQA=filtered.reduce((n,q)=>n+q.lidarQA,0);
+ const totalLaneFP=filtered.reduce((n,q)=>n+q.laneFP,0);
+ const totalLaneQA=filtered.reduce((n,q)=>n+q.laneQA,0);
+
+ const filteredNames=new Set(filtered.map(q=>q.name));
+ const allFilteredLabelers=new Set();
+ const allFilteredQtcs=new Set();
+ const qi=hdrs.findIndex(h=>String(h).trim().toLowerCase()==='queue name');
+ const ni=hdrs.findIndex(h=>String(h).trim().toLowerCase()==='national id');
+ const li=hdrs.findIndex(h=>String(h).trim().toLowerCase()==='labeler name');
+ const qci=hdrs.findIndex(h=>String(h).trim().toLowerCase()==='qtc name');
+
+ base.forEach(r=>{
+  const qName=qi>=0?String(r[qi]||'').trim():'';
+  if(filteredNames.has(qName)){
+   let lid='';
+   if(ni>=0){
+    const rawNi=String(r[ni]??'').trim().replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632)).replace(/\.0+$/,'').replace(/[\s-]/g,'');
+    if(/^\d{14}$/.test(rawNi))lid=rawNi;
+   }
+   if(!lid&&li>=0){
+    const name=String(r[li]??'').trim().toLowerCase();
+    if(name)lid='name:'+name;
+   }
+   if(lid)allFilteredLabelers.add(lid);
+
+   const qtc=qci>=0?String(r[qci]||'').normalize('NFC').trim().toLowerCase():'';
+   if(qtc)allFilteredQtcs.add(qtc);
+  }
+ });
+
+ const uniqueLabelers=allFilteredLabelers.size;
+ const avgSubmit=uniqueLabelers>0?(totalTasks/uniqueLabelers).toFixed(1):'0';
+ const uniqueQtc=allFilteredQtcs.size;
+
+ // Pagination
+ const pageSize=queuesFilters.pageSize||25;
+ const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+ queuesFilters.page=Math.min(queuesFilters.page,totalPages-1);
+ const visible=filtered.slice(queuesFilters.page*pageSize,(queuesFilters.page+1)*pageSize);
+
+ page.innerHTML='<div class="ux-overview">'
+  +'<div class="ux-heading"><div><div class="ux-eyebrow">Queue breakdown · Shifts & Floors & QTCs</div><h2>Queues Analysis</h2><p>Submission volume, shifts, floors, and QTC distribution per queue</p></div>'+renderHeaderControlsHTML('queues')+'</div>'
+  +renderCategoryCardsHTML(catSummary,queuesFilters.category,'queues')
+  +'<div class="queues-controls">'
+   +'<label>Search Queues / Shifts / Floors / QCs<input id="qSearch" placeholder="Type to filter queues, shifts, floors, QTCs…" value="'+esc(queuesFilters.query)+'"></label>'
+   +'<label>Shift<select id="qShift"><option value="">All shifts ('+allShifts.length+')</option>'+allShifts.map(s=>'<option value="'+esc(s)+'" '+(queuesFilters.shift===s?'selected':'')+'>'+esc(s)+'</option>').join('')+'</select></label>'
+   +'<label>Floor / Unit<select id="qFloor"><option value="">All floors ('+allFloors.length+')</option>'+allFloors.map(f=>'<option value="'+esc(f)+'" '+(queuesFilters.floor===f?'selected':'')+'>'+esc(f)+'</option>').join('')+'</select></label>'
+   +'<label>Category filter<select id="qCategory"><option value="">All categories</option><option value="lidarFP" '+(queuesFilters.category==='lidarFP'?'selected':'')+'>Lidar FP</option><option value="lidarQA" '+(queuesFilters.category==='lidarQA'?'selected':'')+'>Lidar QA</option><option value="laneFP" '+(queuesFilters.category==='laneFP'?'selected':'')+'>Lane Line FP</option><option value="laneQA" '+(queuesFilters.category==='laneQA'?'selected':'')+'>Lane Line QA</option></select></label>'
+   +'<div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end">'
+    +'<button class="btn btn-c" id="qExportCSV">↓ Export CSV</button>'
+    +'<button class="btn" id="qReset">Reset filters</button>'
+   +'</div>'
+  +'</div>'
+  +'<div class="an-overall-bar" style="margin-bottom:18px">'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Queues Count</span><strong class="an-overall-val highlight">'+filtered.length.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Total Submit</span><strong class="an-overall-val highlight">'+totalTasks.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Total Unique QTC</span><strong class="an-overall-val">'+uniqueQtc.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Unique Labelers</span><strong class="an-overall-val">'+uniqueLabelers.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Avg Submit / Labeler</span><strong class="an-overall-val highlight">'+avgSubmit+'</strong></div>'
+  +'</div>'
+  +'<section class="ux-panel">'
+   +'<div class="ux-heading" style="margin-bottom:12px"><div><h3>Queues breakdown table ('+filtered.length.toLocaleString()+' queues)</h3><p>Click any column header with ↕ to sort</p></div><span class="ux-note">Showing '+(visible.length?(queuesFilters.page*pageSize+1):0)+' – '+Math.min((queuesFilters.page+1)*pageSize,filtered.length)+' of '+filtered.length+' queues</span></div>'
+   +'<div class="perf-table">'
+    +'<table>'
+     +'<thead><tr>'
+      +'<th data-sort="name">Queue Name ↕</th>'
+      +'<th>Shifts</th>'
+      +'<th>Floors / Units</th>'
+      +'<th>QCs / QTCs</th>'
+      +'<th data-sort="lidarFP" style="color:#7258f5">Lidar FP ↕</th>'
+      +'<th data-sort="lidarQA" style="color:#15b8a6">Lidar QA ↕</th>'
+      +'<th data-sort="laneFP" style="color:#ed9a35">Lane Line FP ↕</th>'
+      +'<th data-sort="laneQA" style="color:#e9689e">Lane Line QA ↕</th>'
+      +'<th data-sort="totalSubmit">Total Submit ↕</th>'
+      +'<th data-sort="uniqueLabelers">Unique Labelers ↕</th>'
+      +'<th data-sort="avgSubmit">Avg Submit ↕</th>'
+      +'<th data-sort="uniqueQtc">Total Unique QTC ↕</th>'
+     +'</tr></thead>'
+     +'<tbody>'
+      +visible.map(q=>'<tr>'
+       +'<td><b>'+esc(q.name)+'</b></td>'
+       +'<td>'+(q.shifts.length?q.shifts.map(s=>'<span class="q-badge q-shift">'+esc(s)+'</span>').join(''):'—')+'</td>'
+       +'<td>'+(q.floors.length?q.floors.map(f=>'<span class="q-badge q-floor">'+esc(f)+'</span>').join(''):'—')+'</td>'
+       +'<td><span class="q-badge q-qtc" title="'+esc(q.qtcs.join(', '))+'">'+q.uniqueQtc+' QTC'+(q.uniqueQtc===1?'':'s')+'</span></td>'
+       +'<td><b class="q-val-lidar-fp">'+q.lidarFP.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lidar-qa">'+q.lidarQA.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lane-fp">'+q.laneFP.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lane-qa">'+q.laneQA.toLocaleString()+'</b></td>'
+       +'<td><strong class="q-val-total">'+q.totalSubmit.toLocaleString()+'</strong></td>'
+       +'<td><b>'+q.uniqueLabelers.toLocaleString()+'</b></td>'
+       +'<td><span class="q-val-avg">'+q.avgSubmitStr+'</span></td>'
+       +'<td><b>'+q.uniqueQtc.toLocaleString()+'</b></td>'
+      +'</tr>').join('')
+     +'</tbody>'
+    +'</table>'
+    +(!filtered.length?'<div class="ux-empty">No queues match your current filters. Adjust or clear your search.</div>':'')
+   +'</div>'
+   +'<div class="perf-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">'
+    +'<button class="btn" id="qPrev" '+(queuesFilters.page===0?'disabled':'')+'>Previous</button>'
+    +'<span class="ux-note">Page '+(queuesFilters.page+1)+' of '+totalPages+' ('+filtered.length.toLocaleString()+' queues)</span>'
+    +'<button class="btn" id="qNext" '+(queuesFilters.page>=totalPages-1?'disabled':'')+'>Next</button>'
+   +'</div>'
+  +'</section>'
+ +'</div>';
+
+ bindHeaderControls(page,'queues');
+
+ // Card click filter
+ page.querySelectorAll('.an-cat-card[data-cat]').forEach(card=>{
+  const cat=card.dataset.cat;
+  card.onclick=()=>{
+   queuesFilters.category=queuesFilters.category===cat?'':cat;
+   queuesFilters.page=0;
+   renderQueuesAnalysis();
+  };
+  card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.onclick();}};
+ });
+
+ // Table sort headers
+ page.querySelectorAll('th[data-sort]').forEach(th=>{
+  const sortKey=th.dataset.sort;
+  th.onclick=()=>{
+   if(queuesFilters.sortCol===sortKey){
+    queuesFilters.sortAsc=!queuesFilters.sortAsc;
+   }else{
+    queuesFilters.sortCol=sortKey;
+    queuesFilters.sortAsc=sortKey==='name';
+   }
+   renderQueuesAnalysis();
+  };
+ });
+
+ // Inputs
+ const searchInput=$('qSearch');
+ if(searchInput){
+  searchInput.oninput=()=>{
+   queuesFilters.query=searchInput.value;
+   queuesFilters.page=0;
+   renderQueuesAnalysis();
+   // Maintain focus
+   const el=$('qSearch');
+   if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}
+  };
+ }
+
+ const shiftSelect=$('qShift');
+ if(shiftSelect){
+  shiftSelect.onchange=()=>{
+   queuesFilters.shift=shiftSelect.value;
+   queuesFilters.page=0;
+   renderQueuesAnalysis();
+  };
+ }
+
+ const floorSelect=$('qFloor');
+ if(floorSelect){
+  floorSelect.onchange=()=>{
+   queuesFilters.floor=floorSelect.value;
+   queuesFilters.page=0;
+   renderQueuesAnalysis();
+  };
+ }
+
+ const catSelect=$('qCategory');
+ if(catSelect){
+  catSelect.onchange=()=>{
+   queuesFilters.category=catSelect.value;
+   queuesFilters.page=0;
+   renderQueuesAnalysis();
+  };
+ }
+
+ $('qReset')?.addEventListener('click',()=>{
+  Object.assign(queuesFilters,{query:'',shift:'',floor:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0});
+  renderQueuesAnalysis();
+ });
+
+ $('qExportCSV')?.addEventListener('click',()=>exportQueuesCSV(filtered));
+
+ $('qPrev')?.addEventListener('click',()=>{
+  if(queuesFilters.page>0){
+   queuesFilters.page--;
+   renderQueuesAnalysis();
+  }
+ });
+
+ $('qNext')?.addEventListener('click',()=>{
+  if(queuesFilters.page<totalPages-1){
+   queuesFilters.page++;
+   renderQueuesAnalysis();
+  }
+ });
+}
+
 renderAllSections=function(){
 
  if(!root.hidden)oldRender.apply(this,arguments);
@@ -711,6 +1076,7 @@ renderAllSections=function(){
  renderOverview();
 
  renderAnalysis();
+ renderQueuesAnalysis();
 
  renderPerformance();
 
@@ -749,8 +1115,10 @@ try{
 
 
 renderOverview();
-
 renderSharedPeriods();
-
+if(location.hash==='#queues-analysis'&&typeof renderQueuesAnalysis==='function')renderQueuesAnalysis();
+else if(location.hash==='#analysis-overview'&&typeof renderAnalysis==='function')renderAnalysis();
+else if(location.hash==='#performance-labelers'&&typeof renderPerformance==='function')renderPerformance();
+else if(location.hash==='#daily-report'&&typeof renderDailyReport==='function')renderDailyReport();
 })();
 

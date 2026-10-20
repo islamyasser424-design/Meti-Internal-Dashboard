@@ -47,3 +47,18 @@ body{padding-left:232px}.ux-sidebar{position:fixed;inset:0 auto 0 0;width:232px;
 .an-cat-stat-lbl{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .an-cat-stat-val{font-size:16px;font-weight:800;color:var(--text);font-family:var(--display)}
 .an-cat-stat-val.highlight{color:var(--cat-color,var(--accent))}
+
+/* ============ Queues Analysis Styles ============ */
+.queues-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0;padding:16px 20px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg)}
+.queues-controls label{font-size:11px;font-weight:600;color:var(--text-soft);display:flex;flex-direction:column;gap:5px}
+.queues-controls input,.queues-controls select{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3);color:var(--text);font:12px var(--font)}
+.q-badge{display:inline-block;padding:2px 7px;border-radius:6px;font-size:11px;font-weight:600;margin:2px;white-space:nowrap}
+.q-shift{background:rgba(114,88,245,0.15);color:var(--accent)}
+.q-floor{background:rgba(21,184,166,0.15);color:#0eab99}
+.q-qtc{background:rgba(237,154,53,0.15);color:#ed9a35;cursor:help}
+.q-val-lidar-fp{color:#7258f5;font-weight:700}
+.q-val-lidar-qa{color:#15b8a6;font-weight:700}
+.q-val-lane-fp{color:#ed9a35;font-weight:700}
+.q-val-lane-qa{color:#e9689e;font-weight:700}
+.q-val-total{color:var(--text);font-weight:800;font-family:var(--display)}
+.q-val-avg{background:var(--accent-light);color:var(--accent);padding:3px 8px;border-radius:6px;font-weight:700}
