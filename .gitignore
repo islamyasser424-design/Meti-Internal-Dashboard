@@ -1,0 +1,22 @@
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Temporary & Cache files
+*.tmp
+*.bak
+*.log
+.cache/
+
+# Node / Dependencies (if any added in future)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
