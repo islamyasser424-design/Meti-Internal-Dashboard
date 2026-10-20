@@ -578,7 +578,7 @@ td a{color:var(--info);text-decoration:none;font-weight:700;}
   .meeg-wordmark .brand{font-size:1rem}
 }
 </style>
-<link rel="stylesheet" href="dashboard-ui.css?v=20261020-protected-api"/>
+<link rel="stylesheet" href="dashboard-ui.css?v=20261020-fast-v2"/>
 </head>
 <body>
 <div class="arcs-ov" id="arcsOv" onclick="if(event.target===this)closeArchiveSearch()"><div class="arcs-box">
@@ -2221,7 +2221,10 @@ function loadData(){
     _cacheTried=true;
     idbGet('csv').then(c=>{if(c&&c.v===AUTH_VER&&c.text&&rawRows.length===0)onCsvData(c.text,true);});
   }
-  fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(txt=>{idbSet('csv',{v:AUTH_VER,ts:Date.now(),text:txt});onCsvData(txt);}).catch(e=>{
+  const cleanQ=encodeURIComponent('select * where A is not null');
+  const gvizUrl=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&tq=${cleanQ}&gid=${SHEET_GID}`;
+  const exportUrl=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+  fetch(gvizUrl).catch(()=>fetch(exportUrl)).then(r=>{if(!r.ok)return fetch(exportUrl);return r;}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text();}).then(txt=>{idbSet('csv',{v:AUTH_VER,ts:Date.now(),text:txt});onCsvData(txt);}).catch(e=>{
     setSyncActive(false);setTrafficLight('red');if(b)b.disabled=false;
     if(rawRows.length>0){showToast('⚠️ Could not refresh — showing the last loaded data');}
     else showErr('Failed to load data: '+e.message);
@@ -2984,6 +2987,6 @@ async function shotTopPerf(kind,btn){
   }
 }
 </script>
-<script src="dashboard-ui.js?v=20261020-api-speed3"></script>
+<script src="dashboard-ui.js?v=20261020-fast-v2"></script>
 </body>
 </html>

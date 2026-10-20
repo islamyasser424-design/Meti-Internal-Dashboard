@@ -280,64 +280,160 @@ function renderDailyReport(){
 const report=dailyQueueReport(rowsInView(),rawRows);const days=[...selD].sort();
  page.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Queue activity · FP / QA</div><h2>Daily Report</h2><p>'+esc(days.length===1?days[0]:days.length?days[0]+' → '+days[days.length-1]:'All dates · choose a day from the shared date filter above')+'</p></div><button class="btn" id="dailyRefresh">↻ Refresh data</button></div><div id="dailyShift"></div><section class="ux-panel"><h3>Queue daily summary</h3><p>Unique Labelers use valid National Id, once per Queue + Modality + Pass. Queues with zero FP and QA submissions are hidden.</p><div class="perf-table daily-table"><table><thead><tr><th>Queue</th><th>Unique Labelers (FP)</th><th>Total Submit (FP)</th><th>Unique Labelers (QA)</th><th>Total Submit (QA)</th></tr></thead><tbody>'+report.groups.filter(g=>g.fp>0||g.qa>0).map(g=>'<tr><td>'+esc(g.name)+' <span class="daily-mod '+(g.mod==='Lidar'?'daily-lidar':'daily-lane')+'">('+esc(g.mod)+')</span></td><td>'+(report.hasNational?g.fpIds.size.toLocaleString():'—')+'</td><td>'+g.fp.toLocaleString()+'</td><td>'+(report.hasNational?g.qaIds.size.toLocaleString():'—')+'</td><td>'+g.qa.toLocaleString()+'</td></tr>').join('')+'</tbody></table>'+(!report.hasQueue||!report.hasPass?'<p class="ux-empty">Queue Name and Pass columns are required.</p>':report.groups.some(g=>g.fp>0||g.qa>0)?'':'<p class="ux-empty">No queue submissions match the current filters.</p>')+'</div><p class="an-context">'+report.groups.reduce((n,g)=>n+g.missing,0)+' FP/QA entries have missing or invalid National Id; included in submit totals, excluded from unique counts.</p></section></div>';
  const slicers=createListSlicers();[...slicers.children].slice(1).forEach(el=>el.remove());$('dailyShift').appendChild(slicers);$('dailyRefresh').onclick=()=>loadData();
-}
-
-const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady)renderDailyReport();});sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
-/* Bound source requests and worker parsing; keep the same sheet and session. */
-async function fetchSheetText(url,timeoutMs=15000){
- const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
- try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const text=await response.text();if(/^\s*</.test(text))throw new Error('Google returned a sign-in or error page instead of CSV');const first=parseCSV(text.slice(0,text.indexOf('\n')>=0?text.indexOf('\n')+1:text.length))[0]||[];if(!first.some(h=>String(h).trim().toLowerCase()==='queue name')||!first.some(h=>String(h).trim().toLowerCase()==='pass'))throw new Error('The source response is missing Queue Name or Pass');return text;}catch(e){if(e.name==='AbortError')throw new Error('Source request timed out');throw e;}finally{clearTimeout(timer);}
-}
-const originalCsvParser=parseCSVAsync;
-parseCSVAsync=function(text){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(e);}},8000);Promise.resolve().then(()=>originalCsvParser(text)).then(table=>{clearTimeout(timer);resolve(table);},error=>{clearTimeout(timer);try{resolve(parseCSV(text));}catch(e){reject(error);}});});};
-let sheetLoadPromise=null;
-loadData=function(){
- if(sheetLoadPromise)return sheetLoadPromise;
- if(!getLoggedInEmail()){showToast('Sign in to load dashboard data.');return Promise.resolve();}
- const button=$('refreshBtn');setSyncActive(true);setTrafficLight('yellow');if(button)button.disabled=true;
- if(!rawRows.length)$('mainContent').innerHTML='<div class="loader"><div class="spin"></div><span class="ltxt">Loading source data…</span></div>';
- const base='https://docs.google.com/spreadsheets/d/'+SHEET_ID;
- const urls=[base+'/export?format=csv&gid='+encodeURIComponent(SHEET_GID),base+'/gviz/tq?tqx=out:csv&headers=1&gid='+encodeURIComponent(SHEET_GID)];
- sheetLoadPromise=(async()=>{let failure;for(const url of urls){try{const text=await fetchSheetText(url);const hash=simpleHash(text);if(hash===_lastCsvHash&&rawRows.length){lastUpdateTs=Date.now();updateRelativeTime();setTrafficLight('green');return;}const table=await parseCSVAsync(text);onCsvTable(table);_lastCsvHash=hash;idbSet('csv',{v:AUTH_VER,ts:Date.now(),text});return;}catch(e){failure=e;}}
- if(!rawRows.length){const cached=await idbGet('csv');if(cached&&cached.v===AUTH_VER&&cached.text){try{onCsvTable(await parseCSVAsync(cached.text));setTrafficLight('yellow');showToast('Showing saved data. Google could not be reached.');return;}catch(e){}}showErr('Could not load the Google Sheet: '+(failure?.message||'Network error')+'. Check your connection and sheet viewing access, then retry.');}else{setTrafficLight('red');showToast('Refresh failed — keeping the last loaded data.');}
- })().finally(()=>{sheetLoadPromise=null;setSyncActive(false);if(button)button.disabled=false;renderDailyReport();});return sheetLoadPromise;
-};
-
-const rowDates=new WeakMap();const uncachedRowDate=rDate;rDate=function(row){const source=tsIdx>=0?row[tsIdx]:undefined;const hit=rowDates.get(row);if(hit&&hit.column===tsIdx&&hit.source===source)return hit.value;const value=uncachedRowDate(row);rowDates.set(row,{column:tsIdx,source,value});return value;};
-const oldRender=renderAllSections;renderAllSections=function(){if(!root.hidden)oldRender.apply(this,arguments);renderSharedPeriods();renderOverview();renderAnalysis();renderPerformance();renderDailyReport();};
-const protectedEndpoint='https://script.google.com/macros/s/AKfycbzEfsRsLvaJfO1MMn5hVcH01tsKu27nVKPshVc8NqffGS_DbNOuI4ykJ2bqf7FwOqaV/exec';
-const protectedCache=new Map(),protectedPending=new Map();let protectedOptionsPromise=null;
-function protectedFilters(){
- const map={'Shift':'shifts','Unit':'units','Floor':'units','Qtc Name':'qtcs','Yubikey Email':'emails','Queue Name':'queues'};const f={};Object.entries(map).forEach(([key,name])=>{if(sel[key]?.size)f[name]=[...sel[key]];});
- if(activeLoc&&!activeLoc.startsWith('__'))f.units=[activeLoc];
- const shifts=Object.values(shiftState).filter(v=>v.on).map(v=>v.key);if(shifts.length&&!f.shifts)f.shifts=(protectedOptions?.shift||Object.values(shiftState).map(v=>v.key)).filter(v=>shifts.includes(v.toLowerCase()));
- if(selD.size===1)f.day=[...selD][0];else if(selD.size){const dates=[...selD].sort();f.from=dates[0];f.to=dates[dates.length-1];}
- if(!selD.size&&selWeeks.size){const starts=[...selWeeks].map(w=>w.match(/\d{4}-\d{2}-\d{2}/)?.[0]).filter(Boolean).sort();if(starts.length){f.from=starts[0];const end=new Date(starts[starts.length-1]+'T00:00:00Z');end.setUTCDate(end.getUTCDate()+6);f.to=end.toISOString().slice(0,10);}}
- return f;
-}
-async function protectedRequest(page,filters={},extra={}){
- const token=getAuthToken();if(!token)throw new Error('Sign in again to access the protected API.');
- const key=JSON.stringify([token,page,filters,extra]);const hit=protectedCache.get(key);if(hit&&Date.now()-hit.at<30000)return hit.data;if(protectedPending.has(key))return protectedPending.get(key);
- const promise=(async()=>{const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),120000);try{const r=await fetch(protectedEndpoint,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'dashboard',token,page,filters,...extra}),signal:ctrl.signal,cache:'no-store'});if(!r.ok)throw new Error('API HTTP '+r.status);let json;try{json=await r.json();}catch(e){throw new Error('The API did not return JSON. Check Web App deployment access.');}if(!json.ok)throw new Error(['invalid','expired','not_allowed'].includes(json.error)?'Session rejected by the data API. Sign in again; both deployments must belong to the same Apps Script project.':'API error: '+(json.error||'unknown'));if(json.apiVersion!==1||json.data===undefined)throw new Error('Deployment is not serving Dashboard API v1.');protectedCache.set(key,{at:Date.now(),data:json.data});return json.data;}catch(e){if(e.name==='AbortError')throw new Error('The API took over two minutes. Retry or narrow the date range.');throw e;}finally{clearTimeout(timer);}})();protectedPending.set(key,promise);try{return await promise;}finally{protectedPending.delete(key);}
-}
-async function ensureProtectedOptions(){if(protectedOptions)return protectedOptions;if(protectedOptionsPromise)return protectedOptionsPromise;protectedOptionsPromise=protectedRequest('filters').then(o=>{protectedOptions=o;window._firstDataReady=true;if(!hdrs.length){hdrs=['Timestamp','Shift','Unit','Qtc Name','Yubikey Email','Labeler Name','National Id','Pc No','Modality','Queue Name','Task Link','Id','Object Count','Pass'];tsIdx=0;locColIdx=2;hdrs.forEach((h,i)=>sIdx[h]=i);sOpts={_dates:o.day||[]};locations=o.unit||[];}if(!_filtersRestored){restoreFilters();_filtersRestored=true;}renderSharedPeriods();if(filterDrawer.open)renderDrawerAnalysis();return o;}).finally(()=>protectedOptionsPromise=null);return protectedOptionsPromise;}
-const protectedVersions=new WeakMap();
-function protectedView(page,title,work){const version=(protectedVersions.get(page)||0)+1;protectedVersions.set(page,version);page.innerHTML='<div class="ux-overview"><h2>'+esc(title)+'</h2><div class="ux-panel" style="margin-top:20px"><p>Loading protected API data… First load can take over a minute.</p></div></div>';Promise.resolve().then(()=>{if(!_filtersRestored){restoreFilters();_filtersRestored=true;}return Promise.all([ensureProtectedOptions(),Promise.resolve().then(work)]);}).then(([,render])=>{if(protectedVersions.get(page)===version&&!page.hidden)render();}).catch(e=>{if(protectedVersions.get(page)!==version||page.hidden)return;page.innerHTML='<div class="ux-overview"><h2>'+esc(title)+'</h2><div class="ux-panel" style="margin-top:20px"><p>'+esc(e.message)+'</p><button class="btn" data-api-retry style="margin-top:12px">Retry API</button></div></div>';page.querySelector('[data-api-retry]').onclick=()=>loadData();});}
-const count=n=>typeof n==='number'?n.toLocaleString():'—';
-function protectedStats(t){return '<div class="ux-grid an-metrics" style="margin:18px 0">'+[['Total Submit',t.submit],['Unique Labelers',t.uniqueLabelers],['Total Unique QTC',t.uniqueQtc],['Total Objects',t.objects]].map(([label,n])=>'<article class="ux-panel"><span class="ux-label">'+label+'</span><strong class="an-value">'+count(n)+'</strong></article>').join('')+'</div>';}
-function protectedHeader(title){return '<div class="ux-heading"><div><div class="ux-eyebrow">Protected API · server calculations</div><h2>'+title+'</h2><p>Current shared date and slicer filters apply.</p></div><button class="btn" data-api-refresh>↻ Refresh API</button></div><div data-api-slicers></div>';}
-function finishProtected(page){page.querySelectorAll('.an-metrics article').forEach(card=>{card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label','Flip metric details');const original=card.innerHTML;let flipped=false;const flip=()=>{flipped=!flipped;card.setAttribute('aria-pressed',String(flipped));card.innerHTML=flipped?'<b>Current API selection</b><p style="margin-top:12px">'+esc(card.dataset.detail||'Values are calculated on the server for the selected date and slicers. Unique labelers are counted by valid National Id.')+'</p><span class="ux-note">Click to return</span>':original;};card.onclick=flip;card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();flip();}};});page.querySelector('[data-api-slicers]')?.appendChild(createListSlicers());const refresh=page.querySelector('[data-api-refresh]');if(refresh)refresh.onclick=()=>loadData();}
-renderDailyReport=function(){if(dailyPage.hidden)return;protectedView(dailyPage,'Daily Report',async()=>{const data=await protectedRequest('daily',protectedFilters());return()=>{dailyPage.innerHTML='<div class="ux-overview">'+protectedHeader('Daily Report')+'<section class="ux-panel"><div class="perf-table daily-table"><table><thead><tr><th>Queue</th><th>Unique Labelers FP</th><th>Total Submit FP</th><th>Unique Labelers QA</th><th>Total Submit QA</th></tr></thead><tbody>'+data.filter(g=>g.fp.submit||g.qa.submit).map(g=>'<tr><td>'+esc(g.queue)+' <span class="daily-mod daily-'+(g.modality==='Lidar'?'lidar':'lane')+'">('+esc(g.modality)+')</span></td><td>'+count(g.fp.uniqueLabelers)+'</td><td>'+count(g.fp.submit)+'</td><td>'+count(g.qa.uniqueLabelers)+'</td><td>'+count(g.qa.submit)+'</td></tr>').join('')+'</tbody></table>'+(!data.length?'<p class="ux-empty">No submissions match these filters.</p>':'')+'</div></section></div>';finishProtected(dailyPage);};});};
-function protectedAnalysisFilters(){const f=protectedFilters();if(analysisFilters.from||analysisFilters.to){delete f.day;f.from=analysisFilters.from;f.to=analysisFilters.to;}if(analysisFilters.shift)f.shifts=[analysisFilters.shift];if(analysisFilters.unit)f.units=[analysisFilters.unit];if(analysisFilters.qtc)f.qtcs=[analysisFilters.qtc];if(analysisFilters.category){const labels={lidarFP:'Lidar FP',lidarQA:'Lidar QA',laneFP:'Lane Line FP',laneQA:'Lane Line QA'};f.categories=[labels[analysisFilters.category]];}else if(analysisFilters.modality==='lane')f.categories=['Lane Line FP','Lane Line QA'];return f;}
-renderAnalysis=function(){if(analysis.hidden)return;protectedView(analysis,'Analysis Overview',async()=>{const f=protectedAnalysisFilters();const sort={sort:analysisFilters.qcLower?'lower':'top'};const floorF={...f};delete floorF.units;delete floorF.categories;const qcF={...f};delete qcF.qtcs;delete qcF.categories;const resultRequest=protectedRequest('overview',f,sort);const [result,floors,qcs]=await Promise.all([resultRequest,f.units?.length||f.categories?.length?protectedRequest('overview',floorF,sort):resultRequest,f.qtcs?.length||f.categories?.length?protectedRequest('overview',qcF,sort):resultRequest]);return()=>{analysis.innerHTML='<div class="ux-overview">'+protectedHeader('Analysis Overview')+protectedStats(result.totals)+'<div class="ux-grid an-metrics">'+result.categories.map(c=>'<article class="ux-panel"><span class="ux-label">'+esc(c.category)+'</span><strong class="an-value">'+count(c.submit)+'</strong><p>Unique Labelers: '+count(c.uniqueLabelers)+' · Unique QTC: '+count(c.uniqueQtc)+'</p></article>').join('')+'</div><div class="an-selection-toolbar"><span class="ux-note">Select a date or shift in the charts to drill down.</span><button class="btn" id="apiClearCharts">Clear chart filters</button></div><div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><div id="apiDailyLine" class="an-line"></div></section><section class="ux-panel"><h3>Submit share by shift</h3><div id="apiShiftDonut" class="an-donut"></div><div id="apiShiftLegend" class="an-legend"></div></section></div><div id="apiCompareCharts" class="an-extra-charts"></div></div>';finishProtected(analysis);$('apiClearCharts').onclick=()=>{Object.assign(analysisFilters,{from:'',to:'',shift:'',unit:'',qtc:'',category:'',modality:'all'});renderAnalysis();};renderProtectedTrend(result);renderProtectedComparison(floors,qcs);};});};
-function apiTooltipText(item){return (item.categories||[]).map(c=>c.category+': '+count(c.submit)).join('\n')+'\nTotal Unique QTC: '+count(item.uniqueQtc);}
-function renderProtectedTrend(data){const points=data.daily.filter(p=>p.name!=='Unknown'),max=Math.max(1,...points.map(p=>p.submit));const x=i=>50+(points.length===1?320:i/(points.length-1)*640),y=v=>220-v/max*190;let svg='<svg viewBox="0 0 740 270" aria-label="Daily submission chart"><line x1="50" x2="690" y1="220" y2="220" stroke="var(--border)"/><text x="10" y="25">'+max+'</text><text x="20" y="224">0</text><polyline fill="none" stroke="#8a6ff7" stroke-width="3" points="'+points.map((p,i)=>x(i)+','+y(p.submit)).join(' ')+'"/>';points.forEach((p,i)=>{svg+='<circle role="button" tabindex="0" data-day="'+esc(p.name)+'" cx="'+x(i)+'" cy="'+y(p.submit)+'" r="6" fill="#8a6ff7" aria-label="'+esc(p.name)+': '+p.submit+'"><title>'+esc(p.name+'\n'+apiTooltipText(p))+'</title></circle>';if(i===0||i===points.length-1)svg+='<text x="'+x(i)+'" y="250" text-anchor="'+(i===0?'start':'end')+'">'+esc(p.name)+'</text>';});$('apiDailyLine').innerHTML=points.length?svg+'</svg>':'<p class="ux-empty">No dated data.</p>';
- const lineSvg=$('apiDailyLine').querySelector('svg');if(lineSvg)lineSvg.onclick=e=>{if(e.target.closest('[data-day]')||!points.length)return;const rect=lineSvg.getBoundingClientRect(),pos=(e.clientX-rect.left)/rect.width*740;const i=Math.min(points.length-1,Math.max(0,Math.round((pos-50)/640*Math.max(0,points.length-1))));analysisFilters.from=points[i].name;analysisFilters.to=points[i].name;renderAnalysis();};
- $('apiDailyLine').querySelectorAll('[data-day]').forEach(b=>{const select=()=>{analysisFilters.from=b.dataset.day;analysisFilters.to=b.dataset.day;renderAnalysis();};b.onclick=select;b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};});const colors=['#7258f5','#15b8a6','#ed9a35','#e9689e','#459ce8','#9ca53c','#b77bdb'];let offset=0;const C=2*Math.PI*70;let ring='<svg viewBox="0 0 200 200" aria-label="Shift share">';data.shifts.forEach((p,i)=>{const length=data.totals.submit?p.submit/data.totals.submit*C:0;ring+='<circle data-shift-index="'+i+'" role="button" tabindex="0" cx="100" cy="100" r="70" fill="none" stroke="'+colors[i%colors.length]+'" stroke-width="25" stroke-dasharray="'+length+' '+(C-length)+'" stroke-dashoffset="'+(-offset)+'" transform="rotate(-90 100 100)"><title>'+esc(p.name+'\n'+apiTooltipText(p))+'</title></circle>';offset+=length;});$('apiShiftDonut').innerHTML=ring+'<text x="100" y="104" text-anchor="middle" class="an-total">'+count(data.totals.submit)+'</text></svg>';$('apiShiftLegend').innerHTML=data.shifts.map((p,i)=>'<div role="button" tabindex="0" data-shift-index="'+i+'"><span class="an-dot" style="background:'+colors[i%colors.length]+'"></span><span>'+esc(p.name)+'</span><b>'+count(p.submit)+'</b><span>'+(data.totals.submit?(p.submit/data.totals.submit*100).toFixed(1):0)+'%</span></div>').join('');analysis.querySelectorAll('[data-shift-index]').forEach(b=>{const select=()=>{analysisFilters.shift=data.shifts[Number(b.dataset.shiftIndex)].name;renderAnalysis();};b.onclick=select;b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};});}
-function renderProtectedComparison(floors,qcs){const defs=[['Lidar FP','lidarFP'],['Lidar QA','lidarQA'],['Lane Line FP','laneFP'],['Lane Line QA','laneQA']];[['unit',floors],['qtc',qcs]].forEach(([dimension,data])=>{const floor=dimension==='unit',key=floor?'floorStage':'qcStage',category=defs.find(d=>d[1]===(analysisFilters[key]||'lidarFP'))?.[0]||'Lidar FP';const list=floor?data.floors.map(p=>({name:p.name,...p.categories.find(c=>c.category===category)})).sort((a,b)=>b.submit-a.submit):data.qcByCategory.find(c=>c.category===category)?.rows||[];const panel=document.createElement('section');panel.className='ux-panel';panel.innerHTML='<h3>'+esc(floor?'Compare all Floors · '+category:(analysisFilters.qcLower?'Lower 15':'Top 15')+' QCs · '+category)+'</h3>';const controls=document.createElement('div');controls.className='an-qc-controls';const select=document.createElement('select');select.className='an-stage-select';select.setAttribute('aria-label',(floor?'Floor':'QC')+' comparison category');defs.forEach(([text,value])=>select.add(new Option(text,value)));select.value=analysisFilters[key]||'lidarFP';select.onchange=()=>{analysisFilters[key]=select.value;renderAnalysis();};controls.appendChild(select);if(!floor){const toggle=document.createElement('button');toggle.className='btn btn-c an-qc-switch';toggle.textContent=analysisFilters.qcLower?'Lower 15 → Top 15':'Top 15 → Lower 15';toggle.onclick=()=>{analysisFilters.qcLower=!analysisFilters.qcLower;renderAnalysis();};controls.appendChild(toggle);}panel.appendChild(controls);const chart=document.createElement('div');chart.className='an-group-chart '+(floor?'horizontal':'vertical');const max=Math.max(1,...list.map(p=>p.submit));list.forEach(p=>{const group=document.createElement('div');group.className='an-bar-group';const name=document.createElement('strong');name.className='an-group-name';name.textContent=p.name;const bars=document.createElement('div');bars.className='an-category-bars';const b=document.createElement('button');b.className='an-category-bar';b.style.setProperty('--bar-size',Math.max(p.submit?2:0,p.submit/max*100)+'%');b.style.setProperty('--bar-color','#7258f5');b.title=p.name+' · '+category+'\nTotal Submit: '+p.submit+'\nUnique QTC: '+p.uniqueQtc;b.innerHTML='<span>'+count(p.submit)+'</span>';b.onclick=()=>{analysisFilters[dimension]=p.name;analysisFilters.category=defs.find(d=>d[0]===category)[1];renderAnalysis();};bars.appendChild(b);group.append(name,bars);chart.appendChild(group);});panel.appendChild(chart);if(!list.length)chart.innerHTML='<p class="ux-empty">No matching submissions.</p>';$('apiCompareCharts').appendChild(panel);});}
-renderPerformance=function(){if(performance.hidden)return;protectedView(performance,'Performance per Labelers',async()=>{const filters=protectedFilters();if(perfFilters.from||perfFilters.to){delete filters.day;filters.from=perfFilters.from;filters.to=perfFilters.to;}if(perfFilters.category){const labels={'lidar FP':'Lidar FP','lidar QA':'Lidar QA','laneline FP':'Lane Line FP','laneline QA':'Lane Line QA'};filters.categories=[labels[perfFilters.category]];}const extra={offset:perfFilters.page*25,limit:25,person:perfFilters.person,query:perfFilters.query};const result=await protectedRequest('performance',filters,extra);return()=>{performance.innerHTML='<div class="ux-overview">'+protectedHeader('Performance per Labelers')+'<div class="ux-panel perf-controls"><label>Search<input id="apiPerfQuery" placeholder="Labeler, QTC, shift or task ID"></label><label>Category<select id="apiPerfCategory"><option value="">All categories</option><option value="lidar FP">Lidar FP</option><option value="lidar QA">Lidar QA</option><option value="laneline FP">Lane Line FP</option><option value="laneline QA">Lane Line QA</option></select></label><button class="btn" id="apiPerfSearch">Apply</button><button class="btn" id="apiPerfAll">All labelers</button></div>'+protectedStats(result.totals)+'<section class="ux-panel"><h3>Labeler ranking · total objects ↓</h3><div class="perf-table"><table><thead><tr><th>Rank</th><th>Labeler</th><th>Total Objects</th><th>Tasks</th><th>Largest task</th><th>Shifts</th><th>QTC</th></tr></thead><tbody>'+result.labelers.map((p,i)=>'<tr><td>'+(extra.offset+i+1)+'</td><td><button class="perf-person" data-api-person="'+i+'">'+esc(p.labeler)+'</button></td><td>'+count(p.objects)+'</td><td>'+count(p.submit)+'</td><td>'+count(p.largestTask)+'</td><td>'+esc(p.shifts.join(', '))+'</td><td>'+esc(p.qtcs.join(', '))+'</td></tr>').join('')+'</tbody></table></div></section><section class="ux-panel" style="margin-top:20px"><h3>Largest tasks · '+(perfFilters.person?'selected labeler':'all labelers')+'</h3><div class="perf-table"><table><thead><tr><th>Labeler</th><th>Objects</th><th>Shift</th><th>Submitting QTC</th><th>Day</th><th>Category</th><th>Task ID</th><th>Task</th></tr></thead><tbody>'+result.tasks.map(t=>'<tr><td>'+esc(t.labeler)+'</td><td>'+count(t.objects)+'</td><td>'+esc(t.shift)+'</td><td>'+esc(t.qtc)+'</td><td>'+esc(t.day)+'</td><td>'+esc(t.modality+' '+t.pass)+'</td><td>'+esc(t.taskId)+'</td><td>'+(/^https?:\/\//i.test(t.taskLink)?'<a href="'+esc(t.taskLink)+'" target="_blank" rel="noopener noreferrer">Open ↗</a>':'—')+'</td></tr>').join('')+'</tbody></table></div><div class="perf-pagination"><button class="btn" id="apiPerfPrev">Previous</button><span>Page '+(perfFilters.page+1)+' · '+result.taskCount+' tasks · '+result.labelerCount+' labelers</span><button class="btn" id="apiPerfNext">Next</button></div></section></div>';finishProtected(performance);$('apiPerfQuery').value=perfFilters.query;$('apiPerfCategory').value=perfFilters.category;$('apiPerfSearch').onclick=()=>{Object.assign(perfFilters,{query:$('apiPerfQuery').value.trim(),category:$('apiPerfCategory').value,person:'',page:0});renderPerformance();};$('apiPerfAll').onclick=()=>{perfFilters.person='';perfFilters.page=0;renderPerformance();};performance.querySelectorAll('[data-api-person]').forEach(b=>b.onclick=()=>{perfFilters.person=result.labelers[Number(b.dataset.apiPerson)].person;perfFilters.page=0;renderPerformance();});$('apiPerfPrev').disabled=perfFilters.page===0;$('apiPerfPrev').onclick=()=>{perfFilters.page--;renderPerformance();};$('apiPerfNext').disabled=extra.offset+25>=(perfFilters.person?result.taskCount:Math.max(result.taskCount,result.labelerCount));$('apiPerfNext').onclick=()=>{perfFilters.page++;renderPerformance();};};});};
-const legacySheetLoad=loadData;
-loadData=function(){if(!root.hidden)return legacySheetLoad();protectedCache.clear();protectedOptions=null;protectedOptionsPromise=null;if(!analysis.hidden)renderAnalysis();else if(!performance.hidden)renderPerformance();else renderDailyReport();return Promise.resolve();};
-
-renderOverview();renderSharedPeriods();
-})();
+}
+
+const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady)renderDailyReport();});sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
+
+/* Bound source requests and worker parsing; keep the same sheet and session. */
+async function fetchSheetText(url,timeoutMs=45000){
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
+ try{
+   const response=await fetch(url,{cache:'no-store',signal:controller.signal});
+   if(!response.ok)throw new Error('HTTP '+response.status);
+   const text=await response.text();
+   if(/^\s*</.test(text))throw new Error('Google returned a sign-in or error page instead of CSV');
+   const firstLine=text.slice(0,text.indexOf('\n')>=0?text.indexOf('\n')+1:text.length);
+   const first=parseCSV(firstLine)[0]||[];
+   if(!first.some(h=>String(h).trim().toLowerCase()==='queue name')||!first.some(h=>String(h).trim().toLowerCase()==='pass'))throw new Error('The source response is missing Queue Name or Pass');
+   return text;
+ }catch(e){
+   if(e.name==='AbortError')throw new Error('Source request timed out');
+   throw e;
+ }finally{clearTimeout(timer);}
+}
+
+const originalCsvParser=parseCSVAsync;
+parseCSVAsync=function(text){
+ return new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>{
+     try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(e);}
+   },15000);
+   Promise.resolve().then(()=>originalCsvParser(text)).then(table=>{
+     clearTimeout(timer);resolve(table);
+   },error=>{
+     clearTimeout(timer);
+     try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(error);}
+   });
+ });
+};
+
+let sheetLoadPromise=null;
+let _instantCacheAttempted=false;
+
+loadData=function(){
+ if(sheetLoadPromise)return sheetLoadPromise;
+ if(!getLoggedInEmail()){showToast('Sign in to load dashboard data.');return Promise.resolve();}
+ const button=$('refreshBtn');setSyncActive(true);setTrafficLight('yellow');if(button)button.disabled=true;
+
+ // Fast cache hydration: immediately render from IndexedDB if memory is empty
+ if(!rawRows.length&&!_instantCacheAttempted){
+   _instantCacheAttempted=true;
+   idbGet('csv').then(cached=>{
+     if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
+       parseCSVAsync(cached.text).then(table=>{
+         if(!rawRows.length&&table&&table.length){
+           onCsvTable(table);
+           setTrafficLight('yellow');
+           showToast('⚡ Showing cached data — syncing latest updates…');
+         }
+       }).catch(()=>{});
+     }
+   }).catch(()=>{});
+ }
+
+ if(!rawRows.length)$('mainContent').innerHTML='<div class="loader"><div class="spin"></div><span class="ltxt">Loading source data…</span></div>';
+ 
+ const base='https://docs.google.com/spreadsheets/d/'+SHEET_ID;
+ const cleanQuery=encodeURIComponent('select * where A is not null');
+ const urls=[
+   base+'/gviz/tq?tqx=out:csv&headers=1&tq='+cleanQuery+(SHEET_GID?'&gid='+encodeURIComponent(SHEET_GID):''),
+   base+'/export?format=csv&gid='+encodeURIComponent(SHEET_GID),
+   base+'/gviz/tq?tqx=out:csv&headers=1&gid='+encodeURIComponent(SHEET_GID)
+ ];
+
+ sheetLoadPromise=(async()=>{
+   let failure;
+   for(const url of urls){
+     try{
+       const text=await fetchSheetText(url,45000);
+       const hash=simpleHash(text);
+       if(hash===_lastCsvHash&&rawRows.length){
+         lastUpdateTs=Date.now();
+         updateRelativeTime();
+         setTrafficLight('green');
+         return;
+       }
+       const table=await parseCSVAsync(text);
+       onCsvTable(table);
+       _lastCsvHash=hash;
+       idbSet('csv',{v:AUTH_VER,ts:Date.now(),text});
+       setTrafficLight('green');
+       return;
+     }catch(e){
+       failure=e;
+     }
+   }
+
+   if(!rawRows.length){
+     const cached=await idbGet('csv');
+     if(cached&&cached.v===AUTH_VER&&cached.text){
+       try{
+         onCsvTable(await parseCSVAsync(cached.text));
+         setTrafficLight('yellow');
+         showToast('Showing saved data. Google could not be reached.');
+         return;
+       }catch(e){}
+     }
+     showErr('Could not load the Google Sheet: '+(failure?.message||'Network error')+'. Check your connection and sheet viewing access, then retry.');
+   }else{
+     setTrafficLight('red');
+     showToast('Refresh failed — keeping the last loaded data.');
+   }
+ })().finally(()=>{
+   sheetLoadPromise=null;
+   setSyncActive(false);
+   if(button)button.disabled=false;
+   renderAllSections();
+ });
+
+ return sheetLoadPromise;
+};
+
+const rowDates=new WeakMap();
+const uncachedRowDate=rDate;
+rDate=function(row){
+ const source=tsIdx>=0?row[tsIdx]:undefined;
+ const hit=rowDates.get(row);
+ if(hit&&hit.column===tsIdx&&hit.source===source)return hit.value;
+ const value=uncachedRowDate(row);
+ rowDates.set(row,{column:tsIdx,source,value});
+ return value;
+};
+
+const oldRender=renderAllSections;
+renderAllSections=function(){
+ if(!root.hidden)oldRender.apply(this,arguments);
+ renderSharedPeriods();
+ renderOverview();
+ renderAnalysis();
+ renderPerformance();
+ renderDailyReport();
+};
+
+// Immediate instant hydration check on script load
+try{
+ idbGet('csv').then(cached=>{
+   if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
+     parseCSVAsync(cached.text).then(table=>{
+       if(!rawRows.length&&table&&table.length){
+         onCsvTable(table);
+         renderAllSections();
+       }
+     }).catch(()=>{});
+   }
+ }).catch(()=>{});
+}catch(e){}
+
+renderOverview();
+renderSharedPeriods();
+})();
