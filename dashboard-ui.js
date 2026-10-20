@@ -305,7 +305,7 @@ loadData=function(){
 
 const rowDates=new WeakMap();const uncachedRowDate=rDate;rDate=function(row){const source=tsIdx>=0?row[tsIdx]:undefined;const hit=rowDates.get(row);if(hit&&hit.column===tsIdx&&hit.source===source)return hit.value;const value=uncachedRowDate(row);rowDates.set(row,{column:tsIdx,source,value});return value;};
 const oldRender=renderAllSections;renderAllSections=function(){if(!root.hidden)oldRender.apply(this,arguments);renderSharedPeriods();renderOverview();renderAnalysis();renderPerformance();renderDailyReport();};
-const protectedEndpoint='https://script.google.com/macros/s/AKfycbx4S7Sbqlshvg3cBIIAebpjCTm0VxX-MhdA0B7hxJFlkEMJkdCjP__SiM2wZ4iii3E/exec';
+const protectedEndpoint='https://script.google.com/macros/s/AKfycbzEfsRsLvaJfO1MMn5hVcH01tsKu27nVKPshVc8NqffGS_DbNOuI4ykJ2bqf7FwOqaV/exec';
 const protectedCache=new Map(),protectedPending=new Map();let protectedOptionsPromise=null;
 function protectedFilters(){
  const map={'Shift':'shifts','Unit':'units','Floor':'units','Qtc Name':'qtcs','Yubikey Email':'emails','Queue Name':'queues'};const f={};Object.entries(map).forEach(([key,name])=>{if(sel[key]?.size)f[name]=[...sel[key]];});
