@@ -277,6 +277,26 @@ const report=dailyQueueReport(rowsInView(),rawRows);const days=[...selD].sort();
 }
 
 const sourceStateObserver=new MutationObserver(()=>{if(!window._firstDataReady)renderDailyReport();});sourceStateObserver.observe($('mainContent'),{childList:true,subtree:true});
+/* Bound source requests and worker parsing; keep the same sheet and session. */
+async function fetchSheetText(url,timeoutMs=15000){
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
+ try{const response=await fetch(url,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const text=await response.text();if(/^\s*</.test(text))throw new Error('Google returned a sign-in or error page instead of CSV');const first=parseCSV(text.slice(0,text.indexOf('\n')>=0?text.indexOf('\n')+1:text.length))[0]||[];if(!first.some(h=>String(h).trim().toLowerCase()==='queue name')||!first.some(h=>String(h).trim().toLowerCase()==='pass'))throw new Error('The source response is missing Queue Name or Pass');return text;}catch(e){if(e.name==='AbortError')throw new Error('Source request timed out');throw e;}finally{clearTimeout(timer);}
+}
+const originalCsvParser=parseCSVAsync;
+parseCSVAsync=function(text){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{try{resolve(parseCSV(text).filter(r=>r&&r.length&&r.some(c=>String(c||'').trim())));}catch(e){reject(e);}},8000);Promise.resolve().then(()=>originalCsvParser(text)).then(table=>{clearTimeout(timer);resolve(table);},error=>{clearTimeout(timer);try{resolve(parseCSV(text));}catch(e){reject(error);}});});};
+let sheetLoadPromise=null;
+loadData=function(){
+ if(sheetLoadPromise)return sheetLoadPromise;
+ if(!getLoggedInEmail()){showToast('Sign in to load dashboard data.');return Promise.resolve();}
+ const button=$('refreshBtn');setSyncActive(true);setTrafficLight('yellow');if(button)button.disabled=true;
+ if(!rawRows.length)$('mainContent').innerHTML='<div class="loader"><div class="spin"></div><span class="ltxt">Loading source data…</span></div>';
+ const base='https://docs.google.com/spreadsheets/d/'+SHEET_ID;
+ const urls=[base+'/export?format=csv&gid='+encodeURIComponent(SHEET_GID),base+'/gviz/tq?tqx=out:csv&headers=1&gid='+encodeURIComponent(SHEET_GID)];
+ sheetLoadPromise=(async()=>{let failure;for(const url of urls){try{const text=await fetchSheetText(url);const table=await parseCSVAsync(text);onCsvTable(table);_lastCsvHash=simpleHash(text);idbSet('csv',{v:AUTH_VER,ts:Date.now(),text});return;}catch(e){failure=e;}}
+ if(!rawRows.length){const cached=await idbGet('csv');if(cached&&cached.v===AUTH_VER&&cached.text){try{onCsvTable(await parseCSVAsync(cached.text));setTrafficLight('yellow');showToast('Showing saved data. Google could not be reached.');return;}catch(e){}}showErr('Could not load the Google Sheet: '+(failure?.message||'Network error')+'. Check your connection and sheet viewing access, then retry.');}else{setTrafficLight('red');showToast('Refresh failed — keeping the last loaded data.');}
+ })().finally(()=>{sheetLoadPromise=null;setSyncActive(false);if(button)button.disabled=false;renderDailyReport();});return sheetLoadPromise;
+};
+
 const oldRender=renderAllSections;renderAllSections=function(){oldRender.apply(this,arguments);renderSharedPeriods();renderOverview();renderAnalysis();renderPerformance();renderDailyReport();};
 renderOverview();renderSharedPeriods();
 })();
