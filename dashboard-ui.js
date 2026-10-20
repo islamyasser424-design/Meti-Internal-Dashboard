@@ -4,6 +4,9 @@
 const $=id=>document.getElementById(id);
 let protectedOptions=null;
 const queuesFilters={query:'',shift:'',floor:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0,pageSize:25};
+const queuesChartFilters={queue:'all',stage:'all',from:'',to:'',day:''};
+const qtcFloorFilters={query:'',qtc:'',floor:'',shift:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0,pageSize:25};
+let view='both';let target=0;try{target=Math.max(0,Number(localStorage.getItem('meeg_personal_target'))||0);}catch(e){}
 const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 const root=document.createElement('div');root.id='uxDashboard';
 const start=document.querySelector('.hdr'),end=$('mainContent');
@@ -16,29 +19,51 @@ document.body.appendChild(analysis);
 const performance=document.createElement('section');performance.id='uxPerformance';performance.hidden=true;document.body.appendChild(performance);
 const dailyPage=document.createElement('section');dailyPage.id='uxDaily';dailyPage.hidden=true;document.body.appendChild(dailyPage);
 const queuesPage=document.createElement('section');queuesPage.id='uxQueues';queuesPage.hidden=true;document.body.appendChild(queuesPage);
-const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><b>◈</b> MEEG<span style="display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:7px">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="queues">☷ &nbsp; Queues Analysis</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
+const qtcFloorPage=document.createElement('section');qtcFloorPage.id='uxQtcFloor';qtcFloorPage.hidden=true;document.body.appendChild(qtcFloorPage);
+const aside=document.createElement('aside');aside.className='ux-sidebar';aside.setAttribute('aria-label','Main navigation');aside.innerHTML='<div class="ux-brand"><b>◈</b> MEEG<span style="display:block;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:7px">PRODUCTIVITY WORKSPACE</span></div><small>WORKSPACE</small><button class="ux-nav active" data-page="dashboard">▦ &nbsp; Dashboard</button><button class="ux-nav" data-page="analysis">◈ &nbsp; Analysis Overview</button><button class="ux-nav" data-page="queues">☷ &nbsp; Queues Analysis</button><button class="ux-nav" data-page="performance">▤ &nbsp; Performance per Labelers</button><button class="ux-nav" data-page="qtcfloor">🏢 &nbsp; Performance per QTC & Floor</button><button class="ux-nav" data-page="daily">▦ &nbsp; Daily Report</button><footer>Connected to your existing data<br><span style="display:block;margin-top:8px">MEEG · Internal Dashboard</span></footer>';
 document.body.appendChild(aside);
 const menu=document.createElement('button');menu.className='btn ux-mobile';menu.textContent='☰ Menu';menu.setAttribute('aria-expanded','false');menu.setAttribute('aria-label','Open navigation');document.body.insertBefore(menu,root);
 const backdrop=document.createElement('button');backdrop.className='ux-backdrop';backdrop.setAttribute('aria-label','Close navigation');document.body.appendChild(backdrop);
 function closeNav(){document.body.classList.remove('ux-sidebar-open');menu.setAttribute('aria-expanded','false');}
 menu.onclick=()=>{const open=document.body.classList.toggle('ux-sidebar-open');menu.setAttribute('aria-expanded',String(open));if(open)aside.querySelector('button').focus();};backdrop.onclick=closeNav;
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNav();menu.focus();}});
-function route(){const current=location.hash==='#analysis-overview'?'analysis':location.hash==='#queues-analysis'?'queues':location.hash==='#performance-labelers'?'performance':location.hash==='#daily-report'?'daily':'dashboard';root.hidden=current!=='dashboard';analysis.hidden=current!=='analysis';queuesPage.hidden=current!=='queues';performance.hidden=current!=='performance';dailyPage.hidden=current!=='daily';aside.querySelectorAll('[data-page]').forEach(b=>{const active=b.dataset.page===current;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});closeNav();
+function route(){const current=location.hash==='#analysis-overview'?'analysis':location.hash==='#queues-analysis'?'queues':location.hash==='#performance-labelers'?'performance':location.hash==='#performance-qtc-floor'?'qtcfloor':location.hash==='#daily-report'?'daily':'dashboard';root.hidden=current!=='dashboard';analysis.hidden=current!=='analysis';queuesPage.hidden=current!=='queues';performance.hidden=current!=='performance';qtcFloorPage.hidden=current!=='qtcfloor';dailyPage.hidden=current!=='daily';aside.querySelectorAll('[data-page]').forEach(b=>{const active=b.dataset.page===current;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});closeNav();
  if(current==='queues'&&typeof renderQueuesAnalysis==='function')renderQueuesAnalysis();
  else if(current==='analysis'&&typeof renderAnalysis==='function')renderAnalysis();
  else if(current==='performance'&&typeof renderPerformance==='function')renderPerformance();
+ else if(current==='qtcfloor'&&typeof renderQtcFloorPerformance==='function')renderQtcFloorPerformance();
  else if(current==='daily'&&typeof renderDailyReport==='function')renderDailyReport();
  else if(typeof renderOverview==='function')renderOverview();
  queueMicrotask(()=>{renderAllSections();if(!root.hidden&&!rawRows.length&&getAuthToken())loadData();});}
-aside.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{location.hash=b.dataset.page==='analysis'?'analysis-overview':b.dataset.page==='queues'?'queues-analysis':b.dataset.page==='performance'?'performance-labelers':b.dataset.page==='daily'?'daily-report':'dashboard';});$('uxBack').onclick=()=>location.hash='dashboard';$('uxSideRefresh')?.addEventListener('click',()=>loadData());$('uxSideTheme')?.addEventListener('click',()=>toggleDark());window.addEventListener('hashchange',route);route();
-let view='both';let target=0;try{target=Math.max(0,Number(localStorage.getItem('meeg_personal_target'))||0);}catch(e){}
+aside.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{location.hash=b.dataset.page==='analysis'?'analysis-overview':b.dataset.page==='queues'?'queues-analysis':b.dataset.page==='performance'?'performance-labelers':b.dataset.page==='qtcfloor'?'performance-qtc-floor':b.dataset.page==='daily'?'daily-report':'dashboard';});$('uxBack').onclick=()=>location.hash='dashboard';$('uxSideRefresh')?.addEventListener('click',()=>loadData());$('uxSideTheme')?.addEventListener('click',()=>toggleDark());window.addEventListener('hashchange',route);route();
 function rowsInView(){return activeLoc&& !activeLoc.startsWith('__')&&locColIdx>=0?fcache.filter(r=>String(r[locColIdx]||'').trim()===activeLoc):fcache;}
 function uniq(rows,name){const i=hdrs.findIndex(h=>h.toLowerCase()===name.toLowerCase());return i<0?null:new Set(rows.map(r=>String(r[i]||'').trim()).filter(Boolean)).size;}
 function daily(rows){const map=new Map();rows.forEach(r=>{const d=rDate(r);if(d)map.set(d,(map.get(d)||0)+1);});return [...map].sort(([a],[b])=>a.localeCompare(b));}
 function spark(points){if(!points.length)return '';const max=Math.max(1,...points.map(p=>p[1]));return '<svg class="ux-spark" viewBox="0 0 200 32" preserveAspectRatio="none" aria-label="Daily submission trend"><polyline fill="none" stroke="currentColor" stroke-width="2.5" points="'+points.map((p,i)=>(points.length===1?100:i/(points.length-1)*200)+','+(30-p[1]/max*26)).join(' ')+'"/></svg>';}
 function animate(){overview.querySelectorAll('[data-count]').forEach(el=>{const value=Number(el.dataset.count);if(reduced()){el.textContent=value.toLocaleString();return;}const begin=performance.now();function tick(t){const p=Math.min(1,(t-begin)/650);el.textContent=Math.round(value*(1-Math.pow(1-p,3))).toLocaleString();if(p<1&&el.isConnected)requestAnimationFrame(tick);}requestAnimationFrame(tick);});}
 function applyView(){root.classList.toggle('ux-summary-hidden',view==='details');root.classList.toggle('ux-details-hidden',view==='summary');overview.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===view)));}
+function resetAllFilters(){
+ selD.clear();selWeeks.clear();
+ Object.keys(sel).forEach(k=>sel[k].clear());
+ Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:'',chartCategory:'all'});
+ Object.assign(queuesFilters,{query:'',shift:'',floor:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0});
+ Object.assign(queuesChartFilters,{queue:'all',stage:'all',from:'',to:'',day:''});
+ Object.assign(perfFilters,{from:'',to:'',day:'',week:'',category:'',query:'',person:'',page:0});
+ Object.assign(qtcFloorFilters,{query:'',qtc:'',floor:'',shift:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0});
+ if(typeof setShiftsUI==='function')setShiftsUI({});
+ const idInput=$('idFilterInput');if(idInput)idInput.value='';
+ idFilter='';timeFrom='';timeTo='';timePreset='';activeLoc='__all__';
+ if(typeof closeAll==='function')closeAll();
+ if(typeof buildStrip==='function')buildStrip();
+ if(typeof applyAll==='function')applyAll();
+ renderAllSections();
+ showToast('✓ All filters have been reset');
+}
+
 function renderHeaderControlsHTML(prefix='ux'){
+ return '<div class="ux-header-actions"><button class="btn btn-reset-all" title="Reset all active filters across all pages">↺ Reset all filters</button></div>';
+}
+function _oldRenderHeaderControlsHTML(prefix='ux'){
  const isDark=document.documentElement.getAttribute('data-theme')==='dark';
  const themeLabel=isDark?'☀️ Light mode':'🌙 Dark mode';
  return '<div class="ux-header-actions">'
@@ -47,6 +72,12 @@ function renderHeaderControlsHTML(prefix='ux'){
   +'</div>';
 }
 function bindHeaderControls(container,prefix='ux'){
+ if(!container)return;
+ container.querySelectorAll('.btn-reset-all').forEach(btn=>{
+  btn.onclick=()=>resetAllFilters();
+ });
+}
+function _oldBindHeaderControls(container,prefix='ux'){
  if(!container)return;
  container.querySelectorAll('.'+prefix+'-btn-refresh').forEach(btn=>{
   btn.onclick=()=>loadData();
@@ -187,10 +218,10 @@ const metrics=[
  ['Avg submit / labeler',window._firstDataReady||rawRows.length?catSummary.overall.avgSubmit:null,'Average submission tasks per unique labeler.','#df8b24'],
  ['Active queues',uniq(rows,'Queue Name'),'Distinct non-empty queues in the current selection.','#df5c99']
 ];
-overview.innerHTML='<div class="ux-heading"><div><div class="ux-eyebrow">Performance at a glance</div><h2>Productivity dashboard</h2><p>Explore your team’s output, one insight at a time.</p></div><div class="ux-tools">'+renderHeaderControlsHTML('ov')+'<label>From<input type="date" id="uxFrom" aria-label="Start date"></label><label>To<input type="date" id="uxTo" aria-label="End date"></label><button class="btn" id="uxRange">Apply range</button><button class="btn" id="uxCSV">↓ CSV</button><button class="btn" id="uxPrint">Print</button></div></div><div class="ux-grid">'+metrics.map(([label,value,note,tone],i)=>'<article class="ux-kpi" style="--tone:'+tone+'"><div class="ux-flipper"><div class="ux-face"><span class="ux-label" title="'+note+'">'+label+'</span><button class="ux-flip" data-flip="'+i+'" aria-label="Show '+label+' details" aria-expanded="false">↗</button><strong '+(value===null?'':'data-count="'+value+'"')+'>'+ (value===null?'—':value.toLocaleString())+'</strong><span class="ux-note">'+(value===null?(window._firstDataReady?'Column unavailable':'Waiting for data'):'Current filtered selection')+'</span>'+(i===0?spark(last):'<span class="ux-note" style="margin-top:auto;color:'+tone+'">'+(rows.length?'Live data · filtered view':'No matching data')+'</span>')+'</div><div class="ux-face ux-back" inert><b>'+label+'</b><p>'+note+'</p><span class="ux-note">'+(value===null?'Required column is missing.':'No previous-period comparison is assumed.')+'</span><button class="btn" data-unflip="'+i+'">Back</button></div></div></article>').join('')+'</div>'
+overview.innerHTML='<div class="ux-heading"><div><div class="ux-eyebrow">Performance at a glance</div><h2>Productivity dashboard</h2><p>Explore your team’s output, one insight at a time.</p></div><div class="ux-tools">'+renderHeaderControlsHTML('ov')+'<button class="btn" id="uxCSV">↓ CSV</button><button class="btn" id="uxPrint">Print</button></div></div><div class="ux-grid">'+metrics.map(([label,value,note,tone],i)=>'<article class="ux-kpi" style="--tone:'+tone+'"><div class="ux-flipper"><div class="ux-face"><span class="ux-label" title="'+note+'">'+label+'</span><button class="ux-flip" data-flip="'+i+'" aria-label="Show '+label+' details" aria-expanded="false">↗</button><strong '+(value===null?'':'data-count="'+value+'"')+'>'+ (value===null?'—':value.toLocaleString())+'</strong><span class="ux-note">'+(value===null?(window._firstDataReady?'Column unavailable':'Waiting for data'):'Current filtered selection')+'</span>'+(i===0?spark(last):'<span class="ux-note" style="margin-top:auto;color:'+tone+'">'+(rows.length?'Live data · filtered view':'No matching data')+'</span>')+'</div><div class="ux-face ux-back" inert><b>'+label+'</b><p>'+note+'</p><span class="ux-note">'+(value===null?'Required column is missing.':'No previous-period comparison is assumed.')+'</span><button class="btn" data-unflip="'+i+'">Back</button></div></div></article>').join('')+'</div>'
 +renderCategoryCardsHTML(catSummary,'','overview')
 +'<div class="ux-panels"><section class="ux-panel"><h3>Submission activity</h3><p>Latest 21 dates with activity. Select a bar to drill into that date.</p><div class="ux-bars">'+(last.length?last.map(([d,c])=>'<button class="ux-bar" style="height:'+Math.max(5,c/max*100)+'%" data-date="'+d+'" title="'+d+': '+c+' submissions" aria-label="'+d+', '+c+' submissions. Filter by this date."></button>').join(''):'<div class="ux-empty">No dated submissions match your selection. Adjust or clear the filters.</div>')+'</div><details><summary>View chart values</summary>'+last.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</details></section><section class="ux-panel"><h3>Personal submission target</h3><p>A target for this filtered selection, saved on this browser.</p><label class="ux-note">Target rows<input class="ux-target" id="uxTarget" type="number" min="1" step="1" placeholder="Set your target" value="'+(target||'')+'"></label><div id="uxProgress"></div></section></div><div class="ux-view-tabs" role="tablist" aria-label="Dashboard view"><button class="btn" role="tab" data-view="summary">Summary</button><button class="btn" role="tab" data-view="details">Details & tables</button><button class="btn" role="tab" data-view="both">Expanded view</button><button class="btn" id="uxCompare">Compare periods</button></div>';
-if(selD.size){const dates=[...selD].sort();$('uxFrom').value=dates[0];$('uxTo').value=dates[dates.length-1];}
+if(selD.size&&$('uxFrom')){const dates=[...selD].sort();$('uxFrom').value=dates[0];$('uxTo').value=dates[dates.length-1];}
 bindHeaderControls(overview,'ov');
 overview.querySelectorAll('[data-flip]').forEach(b=>b.onclick=()=>flip(b.dataset.flip,true));overview.querySelectorAll('[data-unflip]').forEach(b=>b.onclick=()=>flip(b.dataset.unflip,false));
 function flip(i,on){const card=overview.querySelectorAll('.ux-kpi')[i];card.classList.toggle('flipped',on);card.querySelector('.ux-face:not(.ux-back)').inert=on;card.querySelector('.ux-back').inert=!on;card.querySelector('[data-flip]').setAttribute('aria-expanded',String(on));card.querySelector(on?'[data-unflip]':'[data-flip]').focus();}
@@ -201,13 +232,13 @@ overview.querySelectorAll('.an-cat-card[data-cat]').forEach(card=>{
  card.onclick=()=>{analysisFilters.category=cat;location.hash='analysis-overview';};
  card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.onclick();}};
 });
-$('uxRange').onclick=()=>{const from=$('uxFrom').value,to=$('uxTo').value;if(!from||!to||from>to){showToast('Choose a valid start and end date.');return;}selD.clear();selWeeks.clear();const dates=(sOpts._dates||[]).filter(d=>d>=from&&d<=to);if(!dates.length){selD.add(from);}else dates.forEach(d=>selD.add(d));buildStrip();applyAll();};
+if($('uxRange'))$('uxRange').onclick=()=>{const from=$('uxFrom').value,to=$('uxTo').value;if(!from||!to||from>to){showToast('Choose a valid start and end date.');return;}selD.clear();selWeeks.clear();const dates=(sOpts._dates||[]).filter(d=>d>=from&&d<=to);if(!dates.length){selD.add(from);}else dates.forEach(d=>selD.add(d));buildStrip();applyAll();};
 $('uxTarget').onchange=e=>{target=Math.max(0,Math.floor(Number(e.target.value)||0));try{localStorage.setItem('meeg_personal_target',String(target));}catch(e){}progress(rows.length);};
 $('uxCSV').onclick=exportCSV;$('uxPrint').onclick=()=>window.print();$('uxCompare').onclick=()=>{if(!cmpMode)toggleCompare();$('cmpBar').scrollIntoView({behavior:reduced()?'instant':'smooth'});};progress(rows.length);applyView();animate();
 }
 function progress(count){const pct=target?count/target*100:0;$('uxProgress').innerHTML=target?'<div class="ux-track" role="progressbar" aria-label="Submission target" aria-valuenow="'+Math.min(100,Math.round(pct))+'" aria-valuemin="0" aria-valuemax="100"><div class="ux-fill" style="width:'+Math.min(100,pct)+'%"></div></div><b>'+Math.round(pct)+'%</b><p>'+count.toLocaleString()+' of '+target.toLocaleString()+' submissions</p>':'<p style="margin-top:18px">Set a target to see your progress.</p>';}
 function exportCSV(){const rows=rowsInView();if(!rows.length){showToast('No matching rows to export.');return;}const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replace(/"/g,'""')+'"';const csv=[hdrs,...rows].map(r=>r.map(cell).join(',')).join('\r\n');downloadBlob(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),'MEEG_filtered_'+cairoToday()+'.csv');}
-const analysisFilters={from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''};
+const analysisFilters={from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:'',chartCategory:'all'};
 function labelerSubmissionMetrics(rows){
  const idx=name=>hdrs.findIndex(h=>String(h).trim().toLowerCase()===name);
  const ni=idx('national id'),mi=idx('modality'),pi=idx('pass');
@@ -329,7 +360,15 @@ if(analysis.hidden)return;
  const palette=['#7258f5','#15b8a6','#ed9a35','#e9689e','#459ce8','#9ca53c','#b77bdb','#7689a3'];
  analysis.innerHTML='<div class="ux-overview"><div class="ux-heading"><div><div class="ux-eyebrow">Team output · live insights</div><h2>Analysis Overview</h2><p>Submission trends and shift contribution · one row = one submit</p></div>'+renderHeaderControlsHTML('an')+'</div><div class="ux-panel an-filters"><label>From<input id="anFrom" type="date" value="'+analysisFilters.from+'"></label><label>To<input id="anTo" type="date" value="'+analysisFilters.to+'"></label><label>Modality<select id="anMod"><option value="all">All modalities</option><option value="lane">Lane Line</option></select></label><label>Shift<select id="anShift"><option value="">All shifts</option>'+shifts.map(s=>'<option>'+esc(s)+'</option>').join('')+'</select></label><button class="btn btn-c" id="anApply">Apply filters</button><button class="btn" id="anReset">Reset</button><button class="btn" id="anDashboard">Dashboard filters ↗</button></div><p class="an-context">Uses current dashboard filters'+(activeLoc&&!activeLoc.startsWith('__')?' · '+esc(activeLoc):'')+'. These filters narrow that selection.</p>'
   +renderCategoryCardsHTML(catSummary,analysisFilters.category,'analysis')
-  +'<div class="ux-panels"><section class="ux-panel"><h3>Submit by date</h3><p>Click a date to filter. Hover or focus for the four category totals.</p><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
+  +'<div class="ux-panels"><section class="ux-panel"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px"><div><h3 style="margin:0 0 4px">Submit by date · Area Trend</h3><p style="margin:0">Hover for details or click a date to filter. Select stage below.</p></div><div class="an-chart-cat-tabs" id="anChartCatTabs">'
+   +[
+     {key:'all',label:'All Stages (Total)',color:'#8a6ff7'},
+     {key:'lidarFP',label:'Lidar FP',color:'#7258f5'},
+     {key:'lidarQA',label:'Lidar QA',color:'#15b8a6'},
+     {key:'laneFP',label:'Lane Line FP',color:'#ed9a35'},
+     {key:'laneQA',label:'Lane Line QA',color:'#e9689e'}
+   ].map(t=>'<button class="an-chart-tab '+(t.key===(analysisFilters.chartCategory||'all')?'active':'')+'" style="--tab-color:'+t.color+'" data-tab-cat="'+t.key+'">'+t.label+'</button>').join('')
+   +'</div></div><div id="anLine" class="an-line"></div><p>'+(a.undated?a.undated+' submissions without a valid date are excluded from this chart.':'Date follows the dashboard timestamp column.')+'</p><details><summary>View daily values</summary><div class="an-values">'+a.points.map(([d,c])=>'<p>'+d+' · '+c.toLocaleString()+'</p>').join('')+'</div></details></section><section class="ux-panel"><h3>Submit share by shift</h3><p>Share of '+a.selected.length.toLocaleString()+' filtered submissions.</p><div id="anDonut" class="an-donut"></div><div id="anLegend" class="an-legend"></div></section></div></div>';
  bindHeaderControls(analysis,'an');
  analysis.querySelectorAll('.an-cat-card[data-cat]').forEach(card=>{
   const cat=card.dataset.cat;
@@ -340,6 +379,12 @@ if(analysis.hidden)return;
   card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.onclick();}};
  });
  enableAnalysisFlips(a.selected);
+  analysis.querySelectorAll('[data-tab-cat]').forEach(btn=>{
+   btn.onclick=()=>{
+    analysisFilters.chartCategory=btn.dataset.tabCat;
+    renderAnalysis();
+   };
+  });
  const oldFilterBar=analysis.querySelector('.an-filters');oldFilterBar.replaceWith(createListSlicers());
  const resetBar=document.createElement('div');resetBar.className='an-selection-toolbar';
  const resetButton=document.createElement('button');resetButton.className='btn';resetButton.textContent='Clear all filters';resetButton.onclick=()=>{Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''});clearAll();refreshOpenSlicers();};
@@ -348,11 +393,34 @@ if(analysis.hidden)return;
  if(!a.selected.length){$('anLine').innerHTML='<div class="ux-empty">'+(window._firstDataReady?'No submissions match these filters.':'Waiting for dashboard data…')+'</div>';$('anDonut').innerHTML='<div class="ux-empty">No shift distribution available.</div>';addAnalysisCharts(a);return;}
  if(!a.points.length)$('anLine').innerHTML='<div class="ux-empty">No valid dates available.</div>';
  else{
- const W=760,H=280,L=55,R=20,T=20,B=45,max=Math.max(1,...a.points.map(p=>p[1]));const x=i=>L+(a.points.length===1?(W-L-R)/2:i/(a.points.length-1)*(W-L-R)),y=v=>H-B-v/max*(H-T-B);
- let svg='<svg viewBox="0 0 '+W+' '+H+'" role="group" aria-label="Daily submission line chart">';
- for(let i=0;i<5;i++){const value=max*i/4,yy=y(value);svg+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--border)"/><text x="'+(L-9)+'" y="'+(yy+4)+'" text-anchor="end">'+Number(value.toFixed(1)).toLocaleString()+'</text>';}
- svg+='<polyline fill="none" stroke="#8a6ff7" stroke-width="3" stroke-linejoin="round" points="'+a.points.map((p,i)=>x(i)+','+y(p[1])).join(' ')+'"/>';
- a.points.forEach(([d,c],i)=>{svg+='<circle tabindex="0" role="img" aria-label="'+d+': '+c+' submissions" cx="'+x(i)+'" cy="'+y(c)+'" r="4" fill="#8a6ff7"><title>'+d+': '+c.toLocaleString()+' submissions</title></circle>';if(i===0||i===a.points.length-1||(a.points.length>3&&i===Math.floor(a.points.length/2)))svg+='<text x="'+x(i)+'" y="'+(H-12)+'" text-anchor="'+(i===0?'start':i===a.points.length-1?'end':'middle')+'">'+d+'</text>';});$('anLine').innerHTML=svg+'</svg>';
+ const chartCat=analysisFilters.chartCategory||'all';
+  const catColorMap={all:'#8a6ff7',lidarFP:'#7258f5',lidarQA:'#15b8a6',laneFP:'#ed9a35',laneQA:'#e9689e'};
+  const strokeColor=catColorMap[chartCat]||'#8a6ff7';
+  let catRows=a.selected;
+  if(chartCat!=='all'){
+   const mi=hdrs.findIndex(h=>h.toLowerCase()==='modality');
+   const pi=hdrs.findIndex(h=>h.toLowerCase()==='pass');
+   catRows=a.selected.filter(r=>{
+    const mod=mi<0?'':String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'');
+    const pass=pi<0?'':String(r[pi]||'').trim().toUpperCase();
+    const prefix=mod==='lidar'?'lidar':(mod==='laneline'||mod==='lane')?'lane':'';
+    return (prefix+pass)===chartCat;
+   });
+  }
+  const catDates=new Map();
+  catRows.forEach(r=>{const d=rDate(r);if(d)catDates.set(d,(catDates.get(d)||0)+1);});
+  const chartPoints=a.points.map(([d])=>[d,catDates.get(d)||0]);
+
+  const W=760,H=280,L=55,R=20,T=20,B=45,max=Math.max(1,...chartPoints.map(p=>p[1]));const x=i=>L+(chartPoints.length===1?(W-L-R)/2:i/(chartPoints.length-1)*(W-L-R)),y=v=>H-B-v/max*(H-T-B);
+  let svg='<svg viewBox="0 0 '+W+' '+H+'" role="group" aria-label="Daily submission area chart">';
+  svg+='<defs><linearGradient id="anAreaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="'+strokeColor+'" stop-opacity="0.38"/><stop offset="100%" stop-color="'+strokeColor+'" stop-opacity="0.02"/></linearGradient></defs>';
+  for(let i=0;i<5;i++){const value=max*i/4,yy=y(value);svg+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--border)" stroke-dasharray="3 3"/><text x="'+(L-9)+'" y="'+(yy+4)+'" text-anchor="end">'+Number(value.toFixed(1)).toLocaleString()+'</text>';}
+  if(chartPoints.length>1){
+   const polyPoints=[L+','+(H-B),...chartPoints.map((p,i)=>x(i)+','+y(p[1])),(chartPoints.length===1?L:x(chartPoints.length-1))+','+(H-B)].join(' ');
+   svg+='<polygon fill="url(#anAreaGrad)" points="'+polyPoints+'"/>';
+  }
+  svg+='<polyline fill="none" stroke="'+strokeColor+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="'+chartPoints.map((p,i)=>x(i)+','+y(p[1])).join(' ')+'"/>';
+  chartPoints.forEach(([d,c],i)=>{svg+='<circle tabindex="0" role="img" aria-label="'+d+': '+c+' submissions" cx="'+x(i)+'" cy="'+y(c)+'" r="4.5" fill="'+strokeColor+'" stroke="var(--bg-3)" stroke-width="1.5"><title>'+d+' ('+chartCat+'): '+c.toLocaleString()+' submissions</title></circle>';if(i===0||i===chartPoints.length-1||(chartPoints.length>3&&i===Math.floor(chartPoints.length/2)))svg+='<text x="'+x(i)+'" y="'+(H-12)+'" text-anchor="'+(i===0?'start':i===chartPoints.length-1?'end':'middle')+'">'+d+'</text>';});$('anLine').innerHTML=svg+'</svg>';
  }
  let offset=0;const circumference=2*Math.PI*70;let ring='<svg viewBox="0 0 200 200" role="group" aria-label="Shift submission share donut chart"><circle cx="100" cy="100" r="70" fill="none" stroke="var(--border)" stroke-width="26"/>';
  a.shifts.forEach(([s,c],i)=>{const length=c/a.selected.length*circumference;ring+='<circle tabindex="0" role="img" aria-label="'+esc(s)+': '+c+' submissions, '+(c/a.selected.length*100).toFixed(1)+' percent" cx="100" cy="100" r="70" fill="none" stroke="'+palette[i%palette.length]+'" stroke-width="26" stroke-dasharray="'+length+' '+(circumference-length)+'" stroke-dashoffset="'+(-offset)+'" transform="rotate(-90 100 100)"><title>'+esc(s)+' · '+c.toLocaleString()+' · '+(c/a.selected.length*100).toFixed(1)+'%</title></circle>';offset+=length;});
@@ -365,14 +433,14 @@ if(analysis.hidden)return;
 function bookmarkKey(){return 'meeg_filter_bookmarks_v1:'+String(getLoggedInEmail()||'guest').toLowerCase();}
 function readBookmarks(){try{const data=JSON.parse(localStorage.getItem(bookmarkKey())||'[]');return Array.isArray(data)?data.filter(b=>b&&typeof b.id==='string'&&typeof b.name==='string'&&b.state):[];}catch(e){return [];}}
 function writeBookmarks(items){try{localStorage.setItem(bookmarkKey(),JSON.stringify(items));return true;}catch(e){showToast('Bookmarks could not be saved. Check browser storage.');return false;}}
-function captureBookmark(){const input=$('idFilterInput');return {sel:Object.fromEntries(Object.entries(sel).map(([k,v])=>[k,[...v]])),selD:[...selD],selWeeks:[...selWeeks],idFilter:input?input.value.trim():idFilter,timeFrom,timeTo,timePreset,shifts:Object.fromEntries(Object.entries(shiftState).map(([k,v])=>[k,!!v.on])),activeLoc,analysis:{...analysisFilters},view,page:location.hash==='#analysis-overview'?'analysis-overview':location.hash==='#queues-analysis'?'queues-analysis':location.hash==='#performance-labelers'?'performance-labelers':location.hash==='#daily-report'?'daily-report':'dashboard'};}
+function captureBookmark(){const input=$('idFilterInput');return {sel:Object.fromEntries(Object.entries(sel).map(([k,v])=>[k,[...v]])),selD:[...selD],selWeeks:[...selWeeks],idFilter:input?input.value.trim():idFilter,timeFrom,timeTo,timePreset,shifts:Object.fromEntries(Object.entries(shiftState).map(([k,v])=>[k,!!v.on])),activeLoc,analysis:{...analysisFilters},view,page:location.hash==='#analysis-overview'?'analysis-overview':location.hash==='#queues-analysis'?'queues-analysis':location.hash==='#performance-labelers'?'performance-labelers':location.hash==='#performance-qtc-floor'?'performance-qtc-floor':location.hash==='#daily-report'?'daily-report':'dashboard'};}
 function applyBookmark(state){
  clearTimeout(_idFilterDebounce);
  Object.keys(sel).forEach(k=>sel[k].clear());Object.entries(state.sel||{}).forEach(([k,values])=>{if(Array.isArray(values))sel[k]=new Set(values);});
  selD=new Set(state.selD||[]);selWeeks=new Set(state.selWeeks||[]);idFilter=state.idFilter||'';timeFrom=state.timeFrom||'';timeTo=state.timeTo||'';timePreset=TIME_SHIFTS[state.timePreset]?state.timePreset:'';
  setShiftsUI(state.shifts||{});activeLoc=['__all__','__totalsubmit__','__topperf__','__quality__',...locations].includes(state.activeLoc)?state.activeLoc:'__all__';
  Object.assign(analysisFilters,{from:'',to:'',modality:'all',shift:'',unit:'',qtc:'',category:''},state.analysis||{});view=['summary','details','both'].includes(state.view)?state.view:'both';
- closeAll();buildStrip();applyAll();location.hash=['analysis-overview','queues-analysis','performance-labelers','daily-report'].includes(state.page)?state.page:'dashboard';route();
+ closeAll();buildStrip();applyAll();location.hash=['analysis-overview','queues-analysis','performance-labelers','performance-qtc-floor','daily-report'].includes(state.page)?state.page:'dashboard';route();
 }
 const bookmarks=document.createElement('section');bookmarks.className='ux-bookmarks';bookmarks.setAttribute('aria-label','Saved filter bookmarks');bookmarks.innerHTML='<span class="ux-bookmark-icon" aria-hidden="true">☆</span><label for="uxBookmarkList">Filter bookmarks</label><select id="uxBookmarkList" aria-label="Saved filter bookmark"><option value="">Choose a bookmark…</option></select><button class="btn" id="uxBookmarkApply">Apply</button><button class="btn" id="uxBookmarkDelete">Delete</button><form id="uxBookmarkForm"><input id="uxBookmarkName" aria-label="New bookmark name" placeholder="Name this filter selection…" maxlength="60" required><button class="btn btn-c" type="submit">☆ Save bookmark</button></form><span class="ux-note">Saved on this browser</span>';
 document.body.insertBefore(bookmarks,root);
@@ -385,8 +453,11 @@ let bookmarkAccount=bookmarkKey();const bookmarkUserObserver=new MutationObserve
 
 /* A single filter drawer shared by every page. */
 const filterButton=document.createElement('button');filterButton.className='ux-nav';filterButton.id='uxOpenFilters';filterButton.textContent='☆  Bookmark / Filters';filterButton.setAttribute('aria-expanded','false');filterButton.setAttribute('aria-controls','uxFilterDrawer');aside.insertBefore(filterButton,aside.querySelector('footer'));
-const filterDrawer=document.createElement('section');filterDrawer.hidden=true;filterDrawer.open=false;filterDrawer.id='uxFilterDrawer';filterDrawer.setAttribute('aria-labelledby','uxDrawerTitle');filterDrawer.innerHTML='<div class="ux-drawer-head"><div><div class="ux-eyebrow">Saved views & selection</div><h2 id="uxDrawerTitle">Bookmarks & filters</h2></div><button class="btn" id="uxCloseFilters" aria-label="Close filters">✕ Close</button></div><div class="ux-drawer-body"><h3>Saved bookmarks</h3><div id="uxDrawerBookmarks"></div><h3>Dashboard filters · apply immediately</h3><div id="uxDrawerGlobal"></div><h3>Analysis Overview filters</h3><div id="uxDrawerAnalysis"></div></div>';
+const filterDrawer=document.createElement('section');filterDrawer.hidden=true;filterDrawer.open=false;filterDrawer.id='uxFilterDrawer';filterDrawer.setAttribute('aria-labelledby','uxDrawerTitle');filterDrawer.innerHTML='<div class="ux-drawer-head"><div><div class="ux-eyebrow">Saved views & selection</div><h2 id="uxDrawerTitle">Bookmarks & filters</h2></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-c" id="uxDrawerApplyFilters" style="padding:6px 14px;font-weight:700">✓ Apply</button><button class="btn" id="uxCloseFilters" aria-label="Close filters">✕ Close</button></div></div><div class="ux-drawer-body"><div class="ux-drawer-apply-banner"><div><strong>Pending filter selections?</strong><div class="ux-note">Click Apply to push all filters and bookmarks to the dashboard</div></div><button class="btn btn-c" id="uxDrawerApplyBanner" style="padding:6px 14px;font-weight:700">✓ Apply Filters</button></div><h3>Saved bookmarks</h3><div id="uxDrawerBookmarks"></div><h3>Dashboard filters</h3><div id="uxDrawerGlobal"></div><h3>Analysis Overview filters</h3><div id="uxDrawerAnalysis"></div></div>';
 aside.appendChild(filterDrawer);$('uxDrawerBookmarks').appendChild(bookmarks);
+const onDrawerApply=()=>{applyAll();renderAllSections();showToast('✓ Filters applied successfully');closeSidebarFilters();};
+$('uxDrawerApplyFilters')?.addEventListener('click',onDrawerApply);
+$('uxDrawerApplyBanner')?.addEventListener('click',onDrawerApply);
 $('uxDrawerGlobal').hidden=true;$('uxDrawerGlobal').previousElementSibling.hidden=true;$('uxDrawerAnalysis').previousElementSibling.textContent='List slicers · apply immediately';
 const globalFilters=$('uxDrawerGlobal');['.shift-banner','#fstrip','.pills-row','#locTabs'].forEach(selector=>{const el=root.querySelector(selector);if(el)globalFilters.appendChild(el);});
 function closeSidebarFilters(){filterDrawer.hidden=true;filterDrawer.open=false;aside.classList.remove('ux-filters-mode');[...aside.children].forEach(el=>{if(el!==filterDrawer)el.inert=false;});filterButton.setAttribute('aria-expanded','false');if($('uxSidebarPeriods')?.contains(sharedPeriods))document.body.insertBefore(sharedPeriods,root);filterButton.focus();}
@@ -427,12 +498,43 @@ function rankQcGroups(groups,category,lower){return groups.filter(g=>g.totals[ca
 const sharedPeriods=document.createElement('section');sharedPeriods.className='ux-shared-periods';sharedPeriods.setAttribute('aria-label','Date filters for all pages');document.body.insertBefore(sharedPeriods,root);
 function renderSharedPeriods(){
  const dates=protectedOptions?[...(protectedOptions.day||[])].sort().reverse():[...new Set(rawRows.map(r=>rDate(r)).filter(Boolean))].sort().reverse();const weeks=[...new Set(dates.map(d=>performanceWeek(d)?.start).filter(Boolean))].sort().reverse();
- sharedPeriods.replaceChildren();const caption=document.createElement('strong');caption.textContent='All pages';sharedPeriods.appendChild(caption);
- const dayLabel=document.createElement('label');dayLabel.textContent='Day';const day=document.createElement('input');day.type='date';day.setAttribute('aria-label','Day filter for all pages');day.value=selD.size===1?[...selD][0]:'';dayLabel.appendChild(day);sharedPeriods.appendChild(dayLabel);const applyDay=document.createElement('button');applyDay.className='btn btn-c';applyDay.textContent='Apply Day';sharedPeriods.appendChild(applyDay);
- const weekLabel=document.createElement('label');weekLabel.textContent='Week · Saturday–Friday';const week=document.createElement('select');week.setAttribute('aria-label','Week filter for all pages');week.add(new Option('All weeks',''));weeks.forEach(w=>week.add(new Option(w+' → '+performanceWeek(w).end,w)));if(selD.size===7){const starts=new Set([...selD].map(d=>performanceWeek(d)?.start));if(starts.size===1)week.value=[...starts][0];}weekLabel.appendChild(week);sharedPeriods.appendChild(weekLabel);
+ sharedPeriods.replaceChildren();
+ const caption=document.createElement('strong');caption.textContent='GLOBAL FILTERS';sharedPeriods.appendChild(caption);
+
+ const dayLabel=document.createElement('label');dayLabel.textContent='Day: ';
+ const day=document.createElement('input');day.type='date';day.id='sharedDay';day.setAttribute('aria-label','Day filter for all pages');day.value=selD.size===1?[...selD][0]:'';dayLabel.appendChild(day);
+ const applyDay=document.createElement('button');applyDay.className='btn btn-c';applyDay.textContent='Apply Day';
+ dayLabel.appendChild(applyDay);sharedPeriods.appendChild(dayLabel);
+
+ const rangeWrap=document.createElement('div');rangeWrap.style.display='inline-flex';rangeWrap.style.alignItems='center';rangeWrap.style.gap='5px';
+ rangeWrap.innerHTML='<label>From: <input type="date" id="sharedFrom"></label><label>To: <input type="date" id="sharedTo"></label><button class="btn btn-c" id="sharedApplyRange">Apply Range</button>';
+ const fromInp=rangeWrap.querySelector('#sharedFrom');const toInp=rangeWrap.querySelector('#sharedTo');
+ if(selD.size>1){const s=[...selD].sort();fromInp.value=s[0];toInp.value=s[s.length-1];}
+ rangeWrap.querySelector('#sharedApplyRange').onclick=()=>{
+  const f=fromInp.value,t=toInp.value;
+  if(!f||!t||f>t){showToast('Choose a valid start and end date.');return;}
+  selD.clear();selWeeks.clear();
+  const rangeDates=(sOpts._dates||[]).filter(d=>d>=f&&d<=t);
+  if(!rangeDates.length)selD.add(f);else rangeDates.forEach(d=>selD.add(d));
+  Object.assign(analysisFilters,{from:f,to:t});
+  Object.assign(perfFilters,{from:f,to:t,day:'',week:''});
+  buildStrip();applyAll();renderAllSections();
+  showToast('Applied range: '+f+' → '+t);
+ };
+ sharedPeriods.appendChild(rangeWrap);
+
+ const weekLabel=document.createElement('label');weekLabel.textContent='Week: ';
+ const week=document.createElement('select');week.id='sharedWeek';week.setAttribute('aria-label','Week filter for all pages');week.add(new Option('All weeks',''));weeks.forEach(w=>week.add(new Option(w+' → '+performanceWeek(w).end,w)));
+ if(selD.size===7){const starts=new Set([...selD].map(d=>performanceWeek(d)?.start));if(starts.size===1)week.value=[...starts][0];}
+ weekLabel.appendChild(week);sharedPeriods.appendChild(weekLabel);
+
  function applyPeriod(value,isWeek){selD.clear();selWeeks.clear();if(value){if(isWeek){const d=new Date(value+'T00:00:00Z');for(let i=0;i<7;i++){selD.add(d.toISOString().slice(0,10));d.setUTCDate(d.getUTCDate()+1);}}else selD.add(value);}Object.assign(analysisFilters,{from:'',to:''});Object.assign(perfFilters,{from:'',to:'',day:'',week:'',page:0,person:''});buildStrip();applyAll();}
- applyDay.onclick=()=>{if(!day.value){showToast('Choose a day from the calendar.');day.focus();return;}applyPeriod(day.value,false);};day.onchange=()=>{if(day.value)applyPeriod(day.value,false);};week.onchange=()=>applyPeriod(week.value,true);const clear=document.createElement('button');clear.className='btn';clear.textContent='Clear dates';clear.onclick=()=>applyPeriod('',false);sharedPeriods.appendChild(clear);
- const info=document.createElement('span');info.className='ux-note';info.textContent=selD.size?selD.size+' selected day(s) · applies to every page':'Applies to every page';sharedPeriods.appendChild(info);
+ applyDay.onclick=()=>{if(!day.value){showToast('Choose a day from the calendar.');day.focus();return;}applyPeriod(day.value,false);};
+ day.onchange=()=>{if(day.value)applyPeriod(day.value,false);};
+ week.onchange=()=>applyPeriod(week.value,true);
+
+ const clear=document.createElement('button');clear.className='btn';clear.textContent='Clear dates';clear.onclick=()=>{applyPeriod('',false);fromInp.value='';toInp.value='';day.value='';week.value='';};sharedPeriods.appendChild(clear);
+ const info=document.createElement('span');info.className='ux-note';info.textContent=selD.size?selD.size+' selected day(s) · applies to all pages':'Applies to all pages';sharedPeriods.appendChild(info);
 }
 
 function dailyQueueReport(rows,universe=rows){
@@ -838,6 +940,7 @@ function renderQueuesAnalysis(){
 
  const allShifts=[...new Set(allQueues.flatMap(q=>q.shifts))].sort();
  const allFloors=[...new Set(allQueues.flatMap(q=>q.floors))].sort();
+ const distinctQueues=[...new Set(allQueues.map(q=>q.name))].sort();
 
  // Filter queues
  const qFilter=queuesFilters.query.toLowerCase().trim();
@@ -976,6 +1079,28 @@ function renderQueuesAnalysis(){
     +'<button class="btn" id="qNext" '+(queuesFilters.page>=totalPages-1?'disabled':'')+'>Next</button>'
    +'</div>'
   +'</section>'
+  +'<section class="ux-panel queues-trend-section">'
+   +'<div class="ux-heading" style="margin-bottom:14px">'
+    +'<div>'
+     +'<div class="ux-eyebrow">Interactive Trend Analysis</div>'
+     +'<h3 style="font-size:18px;margin:4px 0">Queue Performance Trend</h3>'
+     +'<p style="margin:0">Track submissions over time for any queue and stage.</p>'
+    +'</div>'
+   +'</div>'
+   +'<div class="queues-controls" style="margin:0 0 16px;padding:14px 18px">'
+    +'<label>Select Queue:<select id="qTrendQueue"><option value="all">All Queues</option>'+distinctQueues.map(n=>'<option value="'+esc(n)+'" '+(queuesChartFilters.queue===n?'selected':'')+'>'+esc(n)+'</option>').join('')+'</select></label>'
+    +'<label>Stage / Modality:<select id="qTrendStage"><option value="all" '+(queuesChartFilters.stage==='all'?'selected':'')+'>All Stages (Total)</option><option value="lidarFP" '+(queuesChartFilters.stage==='lidarFP'?'selected':'')+'>Lidar FP</option><option value="lidarQA" '+(queuesChartFilters.stage==='lidarQA'?'selected':'')+'>Lidar QA</option><option value="laneFP" '+(queuesChartFilters.stage==='laneFP'?'selected':'')+'>Lane Line FP</option><option value="laneQA" '+(queuesChartFilters.stage==='laneQA'?'selected':'')+'>Lane Line QA</option></select></label>'
+    +'<label>Single Day:<input type="date" id="qTrendDay" value="'+esc(queuesChartFilters.day)+'"></label>'
+    +'<label>From:<input type="date" id="qTrendFrom" value="'+esc(queuesChartFilters.from)+'"></label>'
+    +'<label>To:<input type="date" id="qTrendTo" value="'+esc(queuesChartFilters.to)+'"></label>'
+    +'<div style="display:flex;gap:8px;align-self:flex-end">'
+     +'<button class="btn btn-c" id="qTrendApplyDate">Filter Trend</button>'
+     +'<button class="btn" id="qTrendResetDate">Reset Trend</button>'
+    +'</div>'
+   +'</div>'
+   +'<div id="qTrendChart" class="an-line"></div>'
+   +'<div id="qTrendSummary" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;font-size:12px"></div>'
+  +'</section>'
  +'</div>';
 
  bindHeaderControls(page,'queues');
@@ -1065,6 +1190,353 @@ function renderQueuesAnalysis(){
    renderQueuesAnalysis();
   }
  });
+
+ renderQueueTrendChart('qTrendChart',base);
+ $('qTrendQueue')?.addEventListener('change',e=>{queuesChartFilters.queue=e.target.value;renderQueueTrendChart('qTrendChart',base);});
+ $('qTrendStage')?.addEventListener('change',e=>{queuesChartFilters.stage=e.target.value;renderQueueTrendChart('qTrendChart',base);});
+ $('qTrendApplyDate')?.addEventListener('click',()=>{
+  queuesChartFilters.day=$('qTrendDay').value;
+  queuesChartFilters.from=$('qTrendFrom').value;
+  queuesChartFilters.to=$('qTrendTo').value;
+  renderQueueTrendChart('qTrendChart',base);
+ });
+ $('qTrendResetDate')?.addEventListener('click',()=>{
+  Object.assign(queuesChartFilters,{queue:'all',stage:'all',from:'',to:'',day:''});
+  renderQueuesAnalysis();
+ });
+}
+
+
+function renderQueueTrendChart(containerId, rows){
+ const qi=hdrs.findIndex(h=>h.trim().toLowerCase()==='queue name');
+ const mi=hdrs.findIndex(h=>h.trim().toLowerCase()==='modality');
+ const pi=hdrs.findIndex(h=>h.trim().toLowerCase()==='pass');
+
+ let chartRows=rows;
+ if(queuesChartFilters.queue!=='all'&&qi>=0){
+  chartRows=chartRows.filter(r=>String(r[qi]||'').trim()===queuesChartFilters.queue);
+ }
+ if(queuesChartFilters.stage!=='all'){
+  chartRows=chartRows.filter(r=>{
+   const mod=mi<0?'':String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'');
+   const pass=pi<0?'':String(r[pi]||'').trim().toUpperCase();
+   const prefix=mod==='lidar'?'lidar':(mod==='laneline'||mod==='lane')?'lane':'';
+   return (prefix+pass)===queuesChartFilters.stage;
+  });
+ }
+ if(queuesChartFilters.day){
+  chartRows=chartRows.filter(r=>rDate(r)===queuesChartFilters.day);
+ } else {
+  if(queuesChartFilters.from) chartRows=chartRows.filter(r=>{const d=rDate(r); return d&&d>=queuesChartFilters.from;});
+  if(queuesChartFilters.to) chartRows=chartRows.filter(r=>{const d=rDate(r); return d&&d<=queuesChartFilters.to;});
+ }
+
+ const dateMap=new Map();
+ chartRows.forEach(r=>{
+  const d=rDate(r);
+  if(d) dateMap.set(d,(dateMap.get(d)||0)+1);
+ });
+
+ const sortedDates=[...dateMap.keys()].sort();
+ const el=$(containerId);
+ if(!el) return;
+ if(!sortedDates.length){
+  el.innerHTML='<div class="ux-empty">No queue submissions match the selected trend filters.</div>';
+  const sumEl=$('qTrendSummary');
+  if(sumEl) sumEl.innerHTML='<span class="q-trend-pill">Total: 0 submissions</span>';
+  return;
+ }
+
+ const points=[];
+ const startD=queuesChartFilters.from||sortedDates[0];
+ const endD=queuesChartFilters.to||sortedDates[sortedDates.length-1];
+ let cur=new Date(startD+'T00:00:00Z'), end=new Date(endD+'T00:00:00Z');
+ if(cur<=end && (end-cur)/(86400000)<=90){
+  while(cur<=end){
+   const k=cur.toISOString().slice(0,10);
+   points.push([k,dateMap.get(k)||0]);
+   cur.setUTCDate(cur.getUTCDate()+1);
+  }
+ } else {
+  sortedDates.forEach(d=>points.push([d,dateMap.get(d)||0]));
+ }
+
+ const catColorMap={all:'#7258f5',lidarFP:'#7258f5',lidarQA:'#15b8a6',laneFP:'#ed9a35',laneQA:'#e9689e'};
+ const strokeColor=catColorMap[queuesChartFilters.stage]||'#7258f5';
+
+ const W=760,H=260,L=55,R=20,T=20,B=45;
+ const max=Math.max(1,...points.map(p=>p[1]));
+ const x=i=>L+(points.length===1?(W-L-R)/2:i/(points.length-1)*(W-L-R));
+ const y=v=>H-B-v/max*(H-T-B);
+
+ let svg='<svg viewBox="0 0 '+W+' '+H+'" role="group" aria-label="Queue trend area chart">';
+ svg+='<defs><linearGradient id="qTrendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="'+strokeColor+'" stop-opacity="0.4"/><stop offset="100%" stop-color="'+strokeColor+'" stop-opacity="0.02"/></linearGradient></defs>';
+ for(let i=0;i<5;i++){
+  const val=max*i/4, yy=y(val);
+  svg+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--border)" stroke-dasharray="3 3"/><text x="'+(L-9)+'" y="'+(yy+4)+'" text-anchor="end">'+Number(val.toFixed(1)).toLocaleString()+'</text>';
+ }
+ if(points.length>1){
+  const polyPoints=[L+','+(H-B),...points.map((p,i)=>x(i)+','+y(p[1])),(points.length===1?L:x(points.length-1))+','+(H-B)].join(' ');
+  svg+='<polygon fill="url(#qTrendGrad)" points="'+polyPoints+'"/>';
+ }
+ svg+='<polyline fill="none" stroke="'+strokeColor+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="'+points.map((p,i)=>x(i)+','+y(p[1])).join(' ')+'"/>';
+ points.forEach(([d,c],i)=>{
+  svg+='<circle tabindex="0" role="img" aria-label="'+d+': '+c+' submissions" cx="'+x(i)+'" cy="'+y(c)+'" r="4.5" fill="'+strokeColor+'" stroke="var(--bg-3)" stroke-width="1.5"><title>'+d+' ('+queuesChartFilters.stage+'): '+c.toLocaleString()+' submissions</title></circle>';
+  if(i===0||i===points.length-1||(points.length>3&&i===Math.floor(points.length/2))){
+   svg+='<text x="'+x(i)+'" y="'+(H-12)+'" text-anchor="'+(i===0?'start':i===points.length-1?'end':'middle')+'">'+d+'</text>';
+  }
+ });
+ svg+='</svg>';
+ el.innerHTML=svg;
+
+ const sumEl=$('qTrendSummary');
+ if(sumEl){
+  const totalSub=points.reduce((s,p)=>s+p[1],0);
+  const peak=points.reduce((p,c)=>c[1]>p[1]?c:p,['—',0]);
+  sumEl.innerHTML='<span class="q-trend-pill">Queue: <b>'+esc(queuesChartFilters.queue==='all'?'All Queues':queuesChartFilters.queue)+'</b></span>'
+   +'<span class="q-trend-pill">Stage: <b>'+esc(queuesChartFilters.stage)+'</b></span>'
+   +'<span class="q-trend-pill">Total Submissions: <b style="color:var(--accent)">'+totalSub.toLocaleString()+'</b></span>'
+   +'<span class="q-trend-pill">Peak Day: <b>'+peak[0]+' ('+peak[1].toLocaleString()+')</b></span>'
+   +'<span class="q-trend-pill">Active Days: <b>'+points.filter(p=>p[1]>0).length+'</b></span>';
+ }
+}
+
+function qtcFloorAggregateData(rows){
+ const idx=name=>hdrs.findIndex(h=>h.trim().toLowerCase()===name.toLowerCase());
+ const qi=idx('qtc name'), fi=hdrs.findIndex(h=>['floor','unit'].includes(h.trim().toLowerCase()));
+ const si=idx('shift'), mi=idx('modality'), pi=idx('pass');
+ const ni=idx('national id'), li=idx('labeler name');
+
+ const groups=new Map();
+ rows.forEach(r=>{
+  const qtc=qi>=0?(String(r[qi]||'').normalize('NFC').trim().replace(/\s+/gu,' ')||'Unknown QTC'):'Unknown QTC';
+  const floor=fi>=0?(String(r[fi]||'').trim()||'Unknown Floor'):'Unknown Floor';
+  const key=qtc+'|||'+floor;
+  if(!groups.has(key)){
+   groups.set(key,{
+    qtc,
+    floor,
+    shifts:new Set(),
+    lidarFP:0,
+    lidarQA:0,
+    laneFP:0,
+    laneQA:0,
+    totalSubmit:0,
+    labelerSet:new Set()
+   });
+  }
+  const g=groups.get(key);
+  g.totalSubmit++;
+  if(si>=0){
+   const s=String(r[si]||'').trim();
+   if(s)g.shifts.add(s);
+  }
+  let lid='';
+  if(ni>=0){
+   const rawNi=String(r[ni]??'').trim()
+    .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-1632))
+    .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-1776))
+    .replace(/\.0+$/,'').replace(/[\s-]/g,'');
+   if(/^\d{14}$/.test(rawNi))lid=rawNi;
+  }
+  if(!lid&&li>=0){
+   const name=String(r[li]??'').trim().toLowerCase();
+   if(name)lid='name:'+name;
+  }
+  if(lid)g.labelerSet.add(lid);
+
+  const mod=mi<0?'':String(r[mi]||'').toLowerCase().replace(/[\s_-]+/g,'');
+  const pass=pi<0?'':String(r[pi]||'').trim().toUpperCase();
+  const prefix=mod==='lidar'?'lidar':(mod==='laneline'||mod==='lane')?'lane':'';
+  if(prefix&&(pass==='FP'||pass==='QA')){
+   const cat=prefix+pass;
+   if(cat==='lidarFP')g.lidarFP++;
+   else if(cat==='lidarQA')g.lidarQA++;
+   else if(cat==='laneFP')g.laneFP++;
+   else if(cat==='laneQA')g.laneQA++;
+  }
+ });
+
+ return [...groups.values()].map(g=>{
+  const uniqueLabelers=g.labelerSet.size;
+  const avgSubmit=uniqueLabelers>0?(g.totalSubmit/uniqueLabelers):0;
+  return {
+   ...g,
+   shifts:[...g.shifts].sort(),
+   uniqueLabelers,
+   avgSubmit,
+   avgSubmitStr:avgSubmit.toFixed(1)
+  };
+ });
+}
+
+function exportQtcFloorCSV(items){
+ if(!items||!items.length){
+  showToast('No QTC & Floor data to export.');
+  return;
+ }
+ const headers=['QTC Name','Floor','Shifts','Lidar FP Submit','Lidar QA Submit','Lane Line FP Submit','Lane Line QA Submit','Total Submit','Unique Labelers','Avg Submit / Labeler'];
+ const cell=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replace(/"/g,'""')+'"';
+ const rows=items.map(q=>[
+  q.qtc,
+  q.floor,
+  q.shifts.join('; '),
+  q.lidarFP,
+  q.lidarQA,
+  q.laneFP,
+  q.laneQA,
+  q.totalSubmit,
+  q.uniqueLabelers,
+  q.avgSubmitStr
+ ]);
+ const csv=[headers,...rows].map(r=>r.map(cell).join(',')).join('\r\n');
+ downloadBlob(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}),'MEEG_QTC_Floor_Performance_'+cairoToday()+'.csv');
+}
+
+function renderQtcFloorPerformance(){
+ const page=$('uxQtcFloor');
+ if(!page||page.hidden)return;
+
+ const rows=rowsInView();
+ const allGroups=qtcFloorAggregateData(rows);
+
+ const distinctQtcs=[...new Set(allGroups.map(g=>g.qtc))].sort();
+ const distinctFloors=[...new Set(allGroups.map(g=>g.floor))].sort();
+ const distinctShifts=[...new Set(allGroups.flatMap(g=>g.shifts))].sort();
+
+ const q=qtcFloorFilters.query.toLowerCase().trim();
+ const filtered=allGroups.filter(g=>{
+  if(q&&![g.qtc,g.floor,...g.shifts].some(v=>v.toLowerCase().includes(q)))return false;
+  if(qtcFloorFilters.qtc&&g.qtc!==qtcFloorFilters.qtc)return false;
+  if(qtcFloorFilters.floor&&g.floor!==qtcFloorFilters.floor)return false;
+  if(qtcFloorFilters.shift&&!g.shifts.includes(qtcFloorFilters.shift))return false;
+  if(qtcFloorFilters.category){
+   if(qtcFloorFilters.category==='lidarFP'&&g.lidarFP<=0)return false;
+   if(qtcFloorFilters.category==='lidarQA'&&g.lidarQA<=0)return false;
+   if(qtcFloorFilters.category==='laneFP'&&g.laneFP<=0)return false;
+   if(qtcFloorFilters.category==='laneQA'&&g.laneQA<=0)return false;
+  }
+  return true;
+ });
+
+ filtered.sort((a,b)=>{
+  const col=qtcFloorFilters.sortCol;
+  let va=a[col],vb=b[col];
+  if(typeof va==='string')return qtcFloorFilters.sortAsc?va.localeCompare(vb):vb.localeCompare(va);
+  va=Number(va)||0;vb=Number(vb)||0;
+  return qtcFloorFilters.sortAsc?va-vb:vb-va;
+ });
+
+ const pageSize=qtcFloorFilters.pageSize||25;
+ const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+ qtcFloorFilters.page=Math.min(qtcFloorFilters.page,totalPages-1);
+ const visible=filtered.slice(qtcFloorFilters.page*pageSize,(qtcFloorFilters.page+1)*pageSize);
+
+ const totalSubmissions=filtered.reduce((s,g)=>s+g.totalSubmit,0);
+ const totalUniqueLabelers=new Set(filtered.flatMap(g=>[...g.labelerSet])).size;
+ const overallAvg=totalUniqueLabelers>0?(totalSubmissions/totalUniqueLabelers).toFixed(1):'0';
+ const totalUniqueQtcs=new Set(filtered.map(g=>g.qtc)).size;
+ const totalUniqueFloors=new Set(filtered.map(g=>g.floor)).size;
+
+ page.innerHTML='<div class="ux-overview">'
+  +'<div class="ux-heading">'
+   +'<div>'
+    +'<div class="ux-eyebrow">Workforce & Area Breakdown</div>'
+    +'<h2>Performance per QTC & Floor</h2>'
+    +'<p>Submissions, unique labelers, and average throughput broken down by QC & Floor.</p>'
+   +'</div>'
+   +renderHeaderControlsHTML('qfloor')
+  +'</div>'
+  +'<div class="an-overall-bar">'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Total Submissions</span><strong class="an-overall-val highlight">'+totalSubmissions.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Unique QTCs</span><strong class="an-overall-val">'+totalUniqueQtcs.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Unique Floors</span><strong class="an-overall-val">'+totalUniqueFloors.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Unique Labelers</span><strong class="an-overall-val">'+totalUniqueLabelers.toLocaleString()+'</strong></div>'
+   +'<div class="an-overall-item"><span class="an-overall-lbl">Overall Avg Submit</span><strong class="an-overall-val highlight">'+overallAvg+'</strong></div>'
+  +'</div>'
+  +'<div class="queues-controls">'
+   +'<label>Search QTC / Floor / Shift:<input type="search" id="qfSearch" placeholder="Filter by name..." value="'+esc(qtcFloorFilters.query)+'"></label>'
+   +'<label>Filter by QTC:<select id="qfQtc"><option value="">All QTCs</option>'+distinctQtcs.map(q=>'<option value="'+esc(q)+'" '+(qtcFloorFilters.qtc===q?'selected':'')+'>'+esc(q)+'</option>').join('')+'</select></label>'
+   +'<label>Filter by Floor:<select id="qfFloor"><option value="">All Floors</option>'+distinctFloors.map(f=>'<option value="'+esc(f)+'" '+(qtcFloorFilters.floor===f?'selected':'')+'>'+esc(f)+'</option>').join('')+'</select></label>'
+   +'<label>Filter by Shift:<select id="qfShift"><option value="">All Shifts</option>'+distinctShifts.map(s=>'<option value="'+esc(s)+'" '+(qtcFloorFilters.shift===s?'selected':'')+'>'+esc(s)+'</option>').join('')+'</select></label>'
+   +'<label>Stage:<select id="qfCategory"><option value="">All Stages</option><option value="lidarFP" '+(qtcFloorFilters.category==='lidarFP'?'selected':'')+'>Lidar FP</option><option value="lidarQA" '+(qtcFloorFilters.category==='lidarQA'?'selected':'')+'>Lidar QA</option><option value="laneFP" '+(qtcFloorFilters.category==='laneFP'?'selected':'')+'>Lane Line FP</option><option value="laneQA" '+(qtcFloorFilters.category==='laneQA'?'selected':'')+'>Lane Line QA</option></select></label>'
+   +'<div style="display:flex;gap:8px;align-self:flex-end">'
+    +'<button class="btn" id="qfReset">Reset</button>'
+    +'<button class="btn btn-c" id="qfExportCSV">↓ Export CSV</button>'
+   +'</div>'
+  +'</div>'
+  +'<section class="ux-panel">'
+   +'<div class="perf-table">'
+    +'<table>'
+     +'<thead><tr>'
+      +'<th data-qf-sort="qtc">QTC Name ↕</th>'
+      +'<th data-qf-sort="floor">Floor / Unit ↕</th>'
+      +'<th>Shifts</th>'
+      +'<th data-qf-sort="lidarFP" style="color:#7258f5">Lidar FP ↕</th>'
+      +'<th data-qf-sort="lidarQA" style="color:#15b8a6">Lidar QA ↕</th>'
+      +'<th data-qf-sort="laneFP" style="color:#ed9a35">Lane Line FP ↕</th>'
+      +'<th data-qf-sort="laneQA" style="color:#e9689e">Lane Line QA ↕</th>'
+      +'<th data-qf-sort="totalSubmit">Total Submit ↕</th>'
+      +'<th data-qf-sort="uniqueLabelers">Unique Labelers ↕</th>'
+      +'<th data-qf-sort="avgSubmit">Avg Submit ↕</th>'
+     +'</tr></thead>'
+     +'<tbody>'
+      +visible.map(g=>'<tr>'
+       +'<td><b style="color:var(--accent)">'+esc(g.qtc)+'</b></td>'
+       +'<td><span class="q-badge q-floor">'+esc(g.floor)+'</span></td>'
+       +'<td>'+(g.shifts.length?g.shifts.map(s=>'<span class="q-badge q-shift">'+esc(s)+'</span>').join(''):'—')+'</td>'
+       +'<td><b class="q-val-lidar-fp">'+g.lidarFP.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lidar-qa">'+g.lidarQA.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lane-fp">'+g.laneFP.toLocaleString()+'</b></td>'
+       +'<td><b class="q-val-lane-qa">'+g.laneQA.toLocaleString()+'</b></td>'
+       +'<td><strong class="q-val-total">'+g.totalSubmit.toLocaleString()+'</strong></td>'
+       +'<td><b>'+g.uniqueLabelers.toLocaleString()+'</b></td>'
+       +'<td><span class="q-val-avg">'+g.avgSubmitStr+'</span></td>'
+      +'</tr>').join('')
+     +'</tbody>'
+    +'</table>'
+    +(!filtered.length?'<div class="ux-empty">No records match your filters.</div>':'')
+   +'</div>'
+   +'<div class="perf-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">'
+    +'<button class="btn" id="qfPrev" '+(qtcFloorFilters.page===0?'disabled':'')+'>Previous</button>'
+    +'<span class="ux-note">Page '+(qtcFloorFilters.page+1)+' of '+totalPages+' ('+filtered.length.toLocaleString()+' pairs)</span>'
+    +'<button class="btn" id="qfNext" '+(qtcFloorFilters.page>=totalPages-1?'disabled':'')+'>Next</button>'
+   +'</div>'
+  +'</section>'
+ +'</div>';
+
+ bindHeaderControls(page,'qfloor');
+
+ page.querySelectorAll('th[data-qf-sort]').forEach(th=>{
+  const col=th.dataset.qfSort;
+  th.onclick=()=>{
+   if(qtcFloorFilters.sortCol===col)qtcFloorFilters.sortAsc=!qtcFloorFilters.sortAsc;
+   else{qtcFloorFilters.sortCol=col;qtcFloorFilters.sortAsc=col==='qtc'||col==='floor';}
+   renderQtcFloorPerformance();
+  };
+ });
+
+ const searchInp=$('qfSearch');
+ if(searchInp){
+  searchInp.oninput=()=>{
+   qtcFloorFilters.query=searchInp.value;
+   qtcFloorFilters.page=0;
+   renderQtcFloorPerformance();
+   const el=$('qfSearch');
+   if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}
+  };
+ }
+ $('qfQtc')?.addEventListener('change',e=>{qtcFloorFilters.qtc=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
+ $('qfFloor')?.addEventListener('change',e=>{qtcFloorFilters.floor=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
+ $('qfShift')?.addEventListener('change',e=>{qtcFloorFilters.shift=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
+ $('qfCategory')?.addEventListener('change',e=>{qtcFloorFilters.category=e.target.value;qtcFloorFilters.page=0;renderQtcFloorPerformance();});
+ $('qfReset')?.addEventListener('click',()=>{
+  Object.assign(qtcFloorFilters,{query:'',qtc:'',floor:'',shift:'',category:'',sortCol:'totalSubmit',sortAsc:false,page:0});
+  renderQtcFloorPerformance();
+ });
+ $('qfExportCSV')?.addEventListener('click',()=>exportQtcFloorCSV(filtered));
+ $('qfPrev')?.addEventListener('click',()=>{if(qtcFloorFilters.page>0){qtcFloorFilters.page--;renderQtcFloorPerformance();}});
+ $('qfNext')?.addEventListener('click',()=>{if(qtcFloorFilters.page<totalPages-1){qtcFloorFilters.page++;renderQtcFloorPerformance();}});
 }
 
 renderAllSections=function(){
@@ -1079,6 +1551,7 @@ renderAllSections=function(){
  renderQueuesAnalysis();
 
  renderPerformance();
+ renderQtcFloorPerformance();
 
  renderDailyReport();
 
@@ -1119,6 +1592,7 @@ renderSharedPeriods();
 if(location.hash==='#queues-analysis'&&typeof renderQueuesAnalysis==='function')renderQueuesAnalysis();
 else if(location.hash==='#analysis-overview'&&typeof renderAnalysis==='function')renderAnalysis();
 else if(location.hash==='#performance-labelers'&&typeof renderPerformance==='function')renderPerformance();
+else if(location.hash==='#performance-qtc-floor'&&typeof renderQtcFloorPerformance==='function')renderQtcFloorPerformance();
 else if(location.hash==='#daily-report'&&typeof renderDailyReport==='function')renderDailyReport();
 })();
 
