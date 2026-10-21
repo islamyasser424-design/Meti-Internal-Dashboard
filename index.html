@@ -2242,7 +2242,7 @@ function loadData(){
   }
   if(!_cacheTried&&rawRows.length===0){
     _cacheTried=true;
-    idbGet('csv').then(c=>{if(c&&c.v===AUTH_VER&&c.text&&rawRows.length===0)onCsvData(c.text,true);});
+    idbGet('csv-two-sources-v1').then(c=>{if(c&&c.v===AUTH_VER&&c.text&&rawRows.length===0)onCsvData(c.text,true);});
   }
   const cleanQ=encodeURIComponent('select * where A is not null');
   const gvizUrl=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&tq=${cleanQ}&gid=${SHEET_GID}`;
@@ -3070,6 +3070,7 @@ async function shotTopPerf(kind,btn){
   }
 }
 </script>
-<script src="dashboard-ui.js?v=20261020-v7"></script>
+<script src="dashboard-ui.js?v=20261021-two-sources-v1"></script>
 </body>
 </html>
+

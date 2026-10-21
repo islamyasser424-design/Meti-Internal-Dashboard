@@ -1078,6 +1078,60 @@ parseCSVAsync=function(text){
 
 
 
+// Source data uses the existing CSV transport; no layout or calendar changes.
+function dashboardCsvSources(){
+ const base='https://docs.google.com/spreadsheets/d/'+SHEET_ID;
+ const query=encodeURIComponent('select * where A is not null');
+ const backup='https://docs.google.com/spreadsheets/d/1vpsYtvoZSKLsUeKj-FTXVGJmyFygSSck8DUIODJha_A';
+ const tab=encodeURIComponent('Backup Date Base');
+ return [
+  {name:'Main Data Base',urls:[base+'/gviz/tq?tqx=out:csv&headers=1&tq='+query+(SHEET_GID?'&gid='+encodeURIComponent(SHEET_GID):''),base+'/export?format=csv&gid='+encodeURIComponent(SHEET_GID),base+'/gviz/tq?tqx=out:csv&headers=1&gid='+encodeURIComponent(SHEET_GID)]},
+  {name:'Backup Intake / Backup Date Base',urls:[backup+'/gviz/tq?tqx=out:csv&headers=1&sheet='+tab+'&tq='+query,backup+'/gviz/tq?tqx=out:csv&headers=1&sheet='+tab]}
+ ];
+}
+async function fetchDashboardCsvSource(source){
+ let failure;
+ for(const url of source.urls){
+  try{
+   const table=await parseCSVAsync(await fetchSheetText(url,45000));
+   if(!table.length)throw new Error('Empty CSV response');
+   return table;
+  }catch(e){failure=e;}
+ }
+ throw new Error(source.name+': '+(failure?.message||'Source unavailable'));
+}
+function mergeDashboardCsvSources(tables){
+ const canonical=value=>{const key=String(value??'').trim().toLowerCase().replace(/\s+/g,' ');return key==='task id'?'id':key;};
+ const headers=[],keys=[],positions=new Map();
+ tables.forEach(table=>(table[0]||[]).forEach(header=>{
+  const key=canonical(header);if(!key||positions.has(key))return;
+  positions.set(key,headers.length);keys.push(key);headers.push(key==='id'?'Id':String(header).trim());
+ }));
+ const combined=[headers],priorCounts=new Map();
+ const context=['timestamp','shift','unit','qtc name','yubikey email','labeler name','national id','pc no','modality','queue name','task link','id','object count','pass','stage'];
+ const get=(row,key)=>row[positions.get(key)]||'';
+ tables.forEach(table=>{
+  const mapping=(table[0]||[]).map(h=>positions.get(canonical(h)));
+  const counts=new Map();
+  table.slice(1).forEach(input=>{
+   const row=headers.map(()=>'');
+   input.forEach((value,index)=>{const to=mapping[index];if(to!==undefined)row[to]=String(value??'').trim();});
+   if(!row.some(Boolean))return;
+   // Exact matching submission context across sources only. Keep repeated tasks,
+   // FP versus QA and different timestamps. Preserve within-source multiplicity.
+   if(get(row,'id')||get(row,'task link')){
+    const key=JSON.stringify(context.map(k=>k==='timestamp'?(get(row,k)||get(row,'created at')):get(row,k)));
+    const occurrence=(counts.get(key)||0)+1;counts.set(key,occurrence);
+    if(occurrence<=(priorCounts.get(key)||0))return;
+   }
+   combined.push(row);
+  });
+  counts.forEach((count,key)=>priorCounts.set(key,Math.max(count,priorCounts.get(key)||0)));
+ });
+ return combined;
+}
+function dashboardCsvText(table){return table.map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');}
+
 let sheetLoadPromise=null;
 
 let _instantCacheAttempted=false;
@@ -1100,7 +1154,7 @@ loadData=function(){
 
    _instantCacheAttempted=true;
 
-   idbGet('csv').then(cached=>{
+   idbGet('csv-two-sources-v1').then(cached=>{
 
      if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
 
@@ -1130,71 +1184,27 @@ loadData=function(){
 
  
 
- const base='https://docs.google.com/spreadsheets/d/'+SHEET_ID;
-
- const cleanQuery=encodeURIComponent('select * where A is not null');
-
- const urls=[
-
-   base+'/gviz/tq?tqx=out:csv&headers=1&tq='+cleanQuery+(SHEET_GID?'&gid='+encodeURIComponent(SHEET_GID):''),
-
-   base+'/export?format=csv&gid='+encodeURIComponent(SHEET_GID),
-
-   base+'/gviz/tq?tqx=out:csv&headers=1&gid='+encodeURIComponent(SHEET_GID)
-
- ];
-
-
-
  sheetLoadPromise=(async()=>{
-
    let failure;
-
-   for(const url of urls){
-
-     try{
-
-       const text=await fetchSheetText(url,45000);
-
-       const hash=simpleHash(text);
-
-       if(hash===_lastCsvHash&&rawRows.length){
-
-         lastUpdateTs=Date.now();
-
-         updateRelativeTime();
-
-         setTrafficLight('green');
-
-         return;
-
-       }
-
-       const table=await parseCSVAsync(text);
-
-       onCsvTable(table);
-
-       _lastCsvHash=hash;
-
-       idbSet('csv',{v:AUTH_VER,ts:Date.now(),text});
-
-       setTrafficLight('green');
-
-       return;
-
-     }catch(e){
-
-       failure=e;
-
+   try{
+     // Fetch both sources together; never replace combined data with a partial result.
+     const tables=await Promise.all(dashboardCsvSources().map(fetchDashboardCsvSource));
+     const table=mergeDashboardCsvSources(tables);
+     const text=dashboardCsvText(table);
+     const hash=simpleHash(text);
+     if(hash===_lastCsvHash&&rawRows.length){
+       lastUpdateTs=Date.now();updateRelativeTime();setTrafficLight('green');return;
      }
-
-   }
-
-
+     onCsvTable(table);
+     _lastCsvHash=hash;
+     idbSet('csv-two-sources-v1',{v:AUTH_VER,ts:Date.now(),text});
+     setTrafficLight('green');
+     return;
+   }catch(e){failure=e;}
 
    if(!rawRows.length){
 
-     const cached=await idbGet('csv');
+     const cached=await idbGet('csv-two-sources-v1');
 
      if(cached&&cached.v===AUTH_VER&&cached.text){
 
@@ -1204,7 +1214,7 @@ loadData=function(){
 
          setTrafficLight('yellow');
 
-         showToast('Showing saved data. Google could not be reached.');
+         showToast('Showing saved combined data. '+(failure?.message||'A source could not be reached.'));
 
          return;
 
@@ -1212,13 +1222,13 @@ loadData=function(){
 
      }
 
-     showErr('Could not load the Google Sheet: '+(failure?.message||'Network error')+'. Check your connection and sheet viewing access, then retry.');
+     showErr('Could not load both Google Sheets: '+(failure?.message||'Network error')+'. Check source viewing access, then retry.');
 
    }else{
 
      setTrafficLight('red');
 
-     showToast('Refresh failed — keeping the last loaded data.');
+     showToast('Refresh failed — keeping the last combined data. '+(failure?.message||''));
 
    }
 
@@ -2416,7 +2426,7 @@ renderAllSections=function(){
 
 try{
 
- idbGet('csv').then(cached=>{
+ idbGet('csv-two-sources-v1').then(cached=>{
 
    if(cached&&cached.v===AUTH_VER&&cached.text&&!rawRows.length){
 
@@ -2448,4 +2458,5 @@ else if(location.hash==='#performance-labelers'&&typeof renderPerformance==='fun
 else if(location.hash==='#performance-qtc-floor'&&typeof renderQtcFloorPerformance==='function')renderQtcFloorPerformance();
 else if(location.hash==='#daily-report'&&typeof renderDailyReport==='function')renderDailyReport();
 })();
+
 
